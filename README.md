@@ -1,6 +1,6 @@
 # Smarter Playlists
 
-Import iTunes music data to PostgreSQL, build playlists with SQL, export playlists back out to iTunes
+Import iTunes music data to PostgreSQL, build an actual play history, make playlists with SQL and export them back out to iTunes.
 
 This repo consists of two separate Python scripts. One to move data from iTunes to Postgres and the other to go back the other way.
 
