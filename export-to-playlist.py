@@ -16,32 +16,19 @@ DEFAULT_ITUNES_MUSIC_FOLDER = os.path.expanduser('~/Music/iTunes/iTunes Music/')
 DEFAULT_PLAYLIST_NAME = 'January 2019'
 DEFAULT_VIEW_NAME = 'jan_2019'
 DEFAULT_DATABASE_NAME = 'music'
+DEFAULT_USER_NAME = 'postgres'
+DEFAULT_PASSWORD = 'postgres'
 
 
 def main(arg_list=None):
-    parser = argparse.ArgumentParser()
+    args = parse_args(arg_list)
 
-    parser.add_argument('--media', '-m',
-                        help='iTunes music folder [%(default)s]',
-                        dest='itunes_music_folder',
-                        default=DEFAULT_ITUNES_MUSIC_FOLDER)
-    parser.add_argument('--db', '-d',
-                        help='Name of postgres database [%(default)s]',
-                        dest='database_name',
-                        default=DEFAULT_DATABASE_NAME)
-    parser.add_argument('--name', '-n',
-                        help='Playlist name [%(default)s]',
-                        dest='playlist_name',
-                        default=DEFAULT_PLAYLIST_NAME)
-    parser.add_argument('--view', '-v',
-                        help='Table or view to export as playlist [%(default)s]',
-                        dest='view_name',
-                        default=DEFAULT_VIEW_NAME)
-
-    args = parser.parse_args(args=arg_list)
-
+    db_name = args.database_name
     playlist_name = args.playlist_name
     view_name = args.view_name
+    username = args.username
+    password = args.password
+    port = args.port
 
     # FIXME Don't hardcode library details
     plist_dict = collections.OrderedDict([('Major Version', 1),
@@ -53,7 +40,7 @@ def main(arg_list=None):
                                           ('Music Folder', 'file:///Users/stephan/Music/iTunes/iTunes%20Media/'),
                                           ('Library Persistent ID', '23D7636E9EB97DA0')])
 
-    conn = psycopg2.connect(host="localhost", database="music", user="postgres", password="postgres")
+    conn = psycopg2.connect(host="localhost", database=db_name, port=port, user=username, password=password)
 
     cur = conn.cursor()
 
@@ -174,6 +161,36 @@ def main(arg_list=None):
 
     with open(qualified_playlist_name, 'wb') as fp:
         plistlib.dump(plist_dict, fp, sort_keys=False)
+
+
+def parse_args(arg_list):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--library', '-l',
+                        help='Path to XML library file [%(default)s]',
+                        dest='library_xml',
+                        default=DEFAULT_ITUNES_MUSIC_FOLDER)
+    parser.add_argument('--db', '-d',
+                        help='Name of postgres database [%(default)s]',
+                        dest='database_name',
+                        default=DEFAULT_DATABASE_NAME)
+    parser.add_argument('--name', '-n',
+                        help='Playlist name [%(default)s]',
+                        dest='playlist_name',
+                        default=DEFAULT_PLAYLIST_NAME)
+    parser.add_argument('--view', '-v',
+                        help='Table or view to export as playlist [%(default)s]',
+                        dest='view_name',
+                        default=DEFAULT_VIEW_NAME)
+    parser.add_argument('--user', '-u',
+                        help='Postgres username [%(default)s]',
+                        dest='username',
+                        default=DEFAULT_USER_NAME)
+    parser.add_argument('--pass', '-x',
+                        help='Postgres password [%(default)s]',
+                        dest='password',
+                        default=DEFAULT_PASSWORD)
+    args = parser.parse_args(args=arg_list)
+    return args
 
 
 def escape_xml_illegal_chars(val, replacement='?'):
