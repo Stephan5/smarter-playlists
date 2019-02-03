@@ -72,3 +72,5 @@ Initially I envisaged having a playlist that was kept up-to-date with new plays 
 Any help on this would be greatly appreciated! (See [Issue #1](https://github.com/Stephan5/smarter-playlists/issues/1))
 
 
+## Acknowledgements
+These scripts borrow heavily from [itunes-to-sql](https://github.com/drien/itunes-to-sql) and [swinsian2itlxml](https://github.com/mhite/swinsian2itlxml) for inspiration. 
