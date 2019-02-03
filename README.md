@@ -67,6 +67,6 @@ This would output an XML file labeled `January 2019.xml` which can be imported i
 ## Improvements
 Unfortunately, I have not yet found a way to automatically import the generated XML playlist into iTunes and must be done manually every single time.
 Initially I envisaged having a playlist that was kept up-to-date with new plays etc (like a smart playlist) but without being able to programatically import the playlist, this is impossible.
-Any help on this would be greatly appreciated! (See issue #1)
+Any help on this would be greatly appreciated! (See [Issue #1](https://github.com/Stephan5/smarter-playlists/issues/1))
 
 
