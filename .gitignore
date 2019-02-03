@@ -1,0 +1,4 @@
+.idea/
+.env
+venv/
+.DS_Store
