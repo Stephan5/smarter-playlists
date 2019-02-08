@@ -165,10 +165,6 @@ def main(arg_list=None):
 
 def parse_args(arg_list):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--library', '-l',
-                        help='Path to XML library file [%(default)s]',
-                        dest='library_xml',
-                        default=DEFAULT_ITUNES_MUSIC_FOLDER)
     parser.add_argument('--db', '-d',
                         help='Name of postgres database [%(default)s]',
                         dest='database_name',
