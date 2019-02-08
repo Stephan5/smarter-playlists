@@ -2,12 +2,11 @@
 
 import argparse
 import logging
-import os
 import plistlib
 
 import psycopg2
 
-DEFAULT_ITUNES_MUSIC_FOLDER = os.path.expanduser('~/Music/iTunes/iTunes Music/')
+DEFAULT_LIBRARY_FILE_LOCATION = '/Users/stephan/Music/iTunes/iTunes Music Library.xml'
 DEFAULT_DATABASE_NAME = 'music'
 DEFAULT_SCHEMA_NAME = 'public'
 DEFAULT_USER_NAME = 'postgres'
@@ -31,9 +30,9 @@ def main(arg_list=None):
     logging.warning("Connecting to database %s on port %s with username %s. Importing data to schema %s",
                     db_name, port, username, schema_name)
 
-    logging.warning("Parsing library file at location: %s", library_xml)
+    logging.warning("Parsing library file at location: %s", library_xml.name)
 
-    library = plistlib.load(args.library)
+    library = plistlib.load(library_xml)
 
     logging.warning("Extracting track data from library file...")
     tracks_table, tracks = process_tracks(library)
@@ -62,7 +61,8 @@ def parse_args(arg_list):
     parser.add_argument('--library',
                         help='Path to XML library file',
                         dest='library_xml',
-                        default=DEFAULT_ITUNES_MUSIC_FOLDER)
+                        type=argparse.FileType('rb'),
+                        default=DEFAULT_LIBRARY_FILE_LOCATION)
     parser.add_argument('--db', '-d',
                         help='Name of postgres database [%(default)s]',
                         dest='database_name',
