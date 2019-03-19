@@ -129,7 +129,7 @@ def create_normalised_tables(db, schema_name):
                "artist_id BIGINT NOT NULL, "
                "play_count INT NOT NULL, "
                "last_played TIMESTAMP, "
-               "date_added TIMESTAMP NOT NULL, "
+               "date_added TIMESTAMP, "
                "track_number INT NOT NULL, "
                "bpm INT, "
                "loved BOOLEAN NOT NULL, "
@@ -272,9 +272,6 @@ def process_tracks(library):
 
         if 'Podcast' in track and track['Podcast']:
             track.pop('Podcast')
-            continue
-        if 'Playlist Only' in track:
-            track.pop('Playlist Only')
             continue
         if 'Music Video' in track:
             track.pop('Music Video')
