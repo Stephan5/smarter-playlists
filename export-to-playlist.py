@@ -8,16 +8,21 @@ import os
 import plistlib
 import random
 import re
+import subprocess
+import sys
 import time
+from urllib.parse import unquote
 
 import psycopg2
 
 DEFAULT_ITUNES_MUSIC_FOLDER = os.path.expanduser('~/Music/iTunes/iTunes Music/')
-DEFAULT_PLAYLIST_NAME = 'January 2019'
-DEFAULT_VIEW_NAME = 'jan_2019'
+DEFAULT_PLAYLIST_NAME = 'Top 2019'
+DEFAULT_VIEW_NAME = 'year_2019'
 DEFAULT_DATABASE_NAME = 'music'
 DEFAULT_USER_NAME = 'postgres'
 DEFAULT_PASSWORD = 'postgres'
+DEFAULT_FORMAT = 'M3U'
+DEFAULT_PORT = 4359
 
 
 def main(arg_list=None):
@@ -29,7 +34,69 @@ def main(arg_list=None):
     username = args.username
     password = args.password
     port = args.port
+    playlist_format = args.format
 
+    if playlist_format == "XML":
+        export_as_xml(db_name, password, playlist_name, port, username, view_name)
+    elif playlist_format == "M3U":
+        export_as_m3u(db_name, password, playlist_name, port, username, view_name)
+    else:
+        sys.exit("Unsupported format selected: " + playlist_format)
+
+
+def export_as_m3u(db_name, password, playlist_name, port, username, view_name):
+    base_file_name = playlist_name
+    temp_file_name = base_file_name + ".txt"
+    final_file_name = base_file_name + ".m3u8"
+
+    m3u_file = open(temp_file_name, "w+")
+    m3u_file.write("#EXTM3U\n")
+
+    rows = fetch_m3u_tracks(db_name, password, port, username, view_name)
+
+    for row in rows:
+        if row[3] is None:
+            logging.warning("No file location found for %s by %s", row[0], row[1])
+            continue
+
+        track_name = row[0]
+        artist_name = row[1]
+        time_in_seconds = int(round(float(row[2]) / 1000, 0))
+        file_location = unquote(row[3]).replace("file://", "")
+
+        m3u_file.write("#EXTINF:" + str(time_in_seconds) + "," + track_name + " - " + artist_name + "\n")
+        m3u_file.write(file_location + "\n")
+
+    m3u_file.close()
+    base = os.path.splitext(temp_file_name)[0]
+    os.rename(temp_file_name, base + ".m3u8")
+
+    subprocess.call(["open", final_file_name])
+
+    os.remove(final_file_name)
+
+
+def fetch_m3u_tracks(db_name, password, port, username, view_name):
+    conn = psycopg2.connect(host="localhost", database=db_name, port=port, user=username, password=password)
+    cur = conn.cursor()
+
+    cur.execute("SELECT name,"
+                "       artist,"
+                "       total_time,"
+                "       location "
+                "  FROM itunes.itunes a "
+                "  JOIN {0} b ON (a.persistent_id = b.itunes_id)"
+                " ORDER BY row_number ASC "
+                .format(view_name))
+
+    rows = cur.fetchall()
+    conn.commit()
+    cur.close()
+    conn.close()
+    return rows
+
+
+def export_as_xml(db_name, password, playlist_name, port, username, view_name):
     # FIXME Don't hardcode library details
     plist_dict = collections.OrderedDict([('Major Version', 1),
                                           ('Minor Version', 1),
@@ -39,13 +106,9 @@ def main(arg_list=None):
                                           ('Application Version', '12.1.2.27'),
                                           ('Music Folder', 'file:///Users/stephan/Music/iTunes/iTunes%20Media/'),
                                           ('Library Persistent ID', '23D7636E9EB97DA0')])
-
     conn = psycopg2.connect(host="localhost", database=db_name, port=port, user=username, password=password)
-
     cur = conn.cursor()
 
-    # tracks
-    logging.warning("Generating track information...")
     cur.execute("SELECT track_id,"
                 "       name,"
                 "       artist,"
@@ -72,12 +135,9 @@ def main(arg_list=None):
                 "  JOIN {0} b ON (a.persistent_id = b.itunes_id)"
                 " ORDER BY row_number "
                 .format(view_name))
-
     rows = cur.fetchall()
     logging.warning("Rows returned by query retrieved")
-
     itunes_track = collections.OrderedDict()
-
     for row in rows:
         track_id = row[0]
         name = escape_xml_illegal_chars(row[1])
@@ -128,37 +188,27 @@ def main(arg_list=None):
 
         track_dict = dict((k, v) for k, v in track_dict.items() if v is not None)
         itunes_track[str(track_id)] = track_dict
-
     conn.commit()
     cur.close()
     conn.close()
-
     plist_dict['Tracks'] = itunes_track
-
     playlist_array = []
     logging.info("Generating 'master' library hidden playlist...")
     playlist_id = random.randint(100000, 999999)
     hexdigits = "0123456789ABCDEF"
     playlist_persistent_id = "".join([hexdigits[random.randint(0, 0xF)] for _ in range(16)])
-
     playlist_items = []
     logging.warning(playlist_persistent_id)
-
     for x in plist_dict['Tracks']:
         playlist_track_dict = {'Track ID': int(x)}
         playlist_items.append(playlist_track_dict)
-
     playlist = {'Name': playlist_name,
                 'Playlist ID': playlist_id,
                 'All Items': True,
                 'Playlist Items': playlist_items}
-
     playlist_array.append(playlist)
-
     plist_dict['Playlists'] = playlist_array
-
     qualified_playlist_name = playlist_name + '.xml'
-
     with open(qualified_playlist_name, 'wb') as fp:
         plistlib.dump(plist_dict, fp, sort_keys=False)
 
@@ -177,6 +227,10 @@ def parse_args(arg_list):
                         help='Table or view to export as playlist [%(default)s]',
                         dest='view_name',
                         default=DEFAULT_VIEW_NAME)
+    parser.add_argument('--port', '-p',
+                        help='Database port [%(default)s]',
+                        dest='port',
+                        default=DEFAULT_PORT)
     parser.add_argument('--user', '-u',
                         help='Postgres username [%(default)s]',
                         dest='username',
@@ -185,6 +239,10 @@ def parse_args(arg_list):
                         help='Postgres password [%(default)s]',
                         dest='password',
                         default=DEFAULT_PASSWORD)
+    parser.add_argument('--format', '-f',
+                        help='Playlist file format [%(default)s]',
+                        dest='format',
+                        default=DEFAULT_FORMAT)
     args = parser.parse_args(args=arg_list)
     return args
 
