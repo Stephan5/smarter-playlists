@@ -137,7 +137,7 @@ def create_normalised_tables(db, schema_name):
                "CONSTRAINT pk_track PRIMARY KEY (track_id), "
                "CONSTRAINT fk_track_artist_id FOREIGN KEY (artist_id) REFERENCES {0}.artist (artist_id), "
                "CONSTRAINT fk_track_album_id FOREIGN KEY (album_id) REFERENCES {0}.album (album_id), "
-               "CONSTRAINT ck_track_date_added CHECK (date_added <= dbrent_timestamp :: TIMESTAMP), "
+               "CONSTRAINT ck_track_date_added CHECK (date_added <= current_timestamp :: TIMESTAMP), "
                "CONSTRAINT ck_track_play_count CHECK (play_count >= 0), "
                "CONSTRAINT uk_track_artist_album UNIQUE (track_name, album_id, artist_id, track_number), "
                "CONSTRAINT uk_track_itunes_id UNIQUE (itunes_id));"
