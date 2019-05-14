@@ -12,6 +12,7 @@ To import your music data to a local postgres database you just need to follow a
 
 ### Prerequisites
 * Python 3.7+
+* [python3-psycopg2](http://initd.org/psycopg/)
 * Postgres running locally
 * iTunes configured to "Share Library XML with other Applications" in Preferences > Advanced
 * Basic SQL knowledge to create a playlist of your liking.
