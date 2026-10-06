@@ -10,10 +10,10 @@
 -- The most played tracks of each month since October 2026, named like "October 2026", with at most 2 tracks from any
 -- album and 5 from any artist. A new playlist appears each month, in a folder for its year.
 
-DROP SCHEMA IF EXISTS playlists CASCADE;
-CREATE SCHEMA playlists;
+DROP SCHEMA IF EXISTS playlist CASCADE;
+CREATE SCHEMA playlist;
 
-CREATE VIEW playlists.monthly AS
+CREATE VIEW playlist.monthly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
        TO_CHAR(month, 'FMMonth YYYY') AS playlist,
        track_id,
@@ -42,7 +42,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
 
 -- The most played tracks of each year since 2026, named like "2026", with at most 5 tracks from any album and 10 from
 -- any artist. A new playlist appears each year, in a folder for its year alongside its monthly playlists.
-CREATE VIEW playlists.yearly AS
+CREATE VIEW playlist.yearly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
        TO_CHAR(year, 'YYYY') AS playlist,
        track_id,
@@ -70,7 +70,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
  WHERE position <= 100;
 
 -- The most played tracks of the last 30 days, with at most 2 tracks from any album and 5 from any artist
-CREATE VIEW playlists."Last Month" AS
+CREATE VIEW playlist."Last Month" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
        ROW_NUMBER() OVER (ORDER BY plays DESC, last_played_at DESC, track_id) AS position
@@ -94,7 +94,7 @@ SELECT 'Smarter Playlists' AS folder,
 
 -- What you're getting into: tracks played more in the last 30 days than in the 90 days before, at least twice, ordered
 -- by how much more. At most 2 tracks from any album and 3 from any artist.
-CREATE VIEW playlists."Rising" AS
+CREATE VIEW playlist."Rising" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
        ROW_NUMBER() OVER (ORDER BY recent_plays - earlier_plays DESC, recent_plays DESC, track_id) AS position
@@ -126,7 +126,7 @@ SELECT 'Smarter Playlists' AS folder,
  LIMIT 50;
 
 -- A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks
-CREATE VIEW playlists.top_artists AS
+CREATE VIEW playlist.top_artists AS
 SELECT 'Smarter Playlists/Top Artists' AS folder,
        artist.name AS playlist,
        track_id,
@@ -149,7 +149,7 @@ SELECT 'Smarter Playlists/Top Artists' AS folder,
  WHERE position <= 25;
 
 -- The most played tracks of all time, with at most 5 tracks per artist
-CREATE VIEW playlists."All-Time Favourites" AS
+CREATE VIEW playlist."All-Time Favourites" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
        ROW_NUMBER() OVER (ORDER BY play_count DESC, track_id) AS position
@@ -164,7 +164,7 @@ SELECT 'Smarter Playlists' AS folder,
  LIMIT 100;
 
 -- Well loved tracks that haven't been played for a year
-CREATE VIEW playlists."Forgotten Favourites" AS
+CREATE VIEW playlist."Forgotten Favourites" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
        ROW_NUMBER() OVER (ORDER BY play_count DESC, track_id) AS position

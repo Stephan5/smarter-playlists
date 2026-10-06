@@ -11,8 +11,7 @@ It imports your Music library into PostgreSQL, keeps a history of every play, an
 ### Prerequisites
 * macOS with the Music app
 * Python 3.14+
-* Postgres
-* Basic SQL knowledge to create a playlist of your liking.
+* PostgreSQL
 
 Install into a virtual environment, then create and set up a database:
 
@@ -54,7 +53,7 @@ Add `WHERE NOT estimated` to a query to count only the plays that were actually 
 
 ## Playlists
 
-Every view in the `playlists` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
+Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
 
 | View                     | Playlists                                                                                                                                                                                 |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -89,7 +88,7 @@ A `folder` column puts playlists in a folder, with `/` between nested folders, e
 For example, to add a playlist of tracks you keep skipping:
 
 ```sql
-CREATE VIEW playlists."Skipped" AS
+CREATE VIEW playlist."Skipped" AS
 SELECT track_id,
        ROW_NUMBER() OVER (ORDER BY skip_count DESC) AS position
   FROM track
@@ -101,7 +100,7 @@ SELECT track_id,
 
 Edit or drop the built-in views to change them. Dropping a view doesn't delete its playlists from Music.
 
-To reset the built-in views, for example after updating Smarter Playlists, re-run `playlists.sql`. This drops and recreates the whole `playlists` schema, so any views you've added to it are lost:
+To reset the built-in views, for example after updating Smarter Playlists, re-run `playlists.sql`. This drops and recreates the whole `playlist` schema, so any views you've added to it are lost:
 
 ```bash
 psql music -f smarter_playlists/playlists.sql

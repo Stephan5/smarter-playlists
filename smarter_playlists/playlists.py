@@ -9,7 +9,7 @@ from psycopg import sql
 
 from . import database
 
-PLAYLISTS_SCHEMA = 'playlists'
+PLAYLISTS_SCHEMA = 'playlist'
 
 PROJECT_URL = 'https://github.com/Stephan5/smarter-playlists'
 
