@@ -1,7 +1,11 @@
 import datetime
 import logging
 
-import iTunesLibrary
+try:
+    import iTunesLibrary
+except ImportError:
+    # Only on macOS, but everything except reading the library works without it
+    iTunesLibrary = None
 
 from . import database
 
@@ -48,6 +52,9 @@ def import_library(database_name):
 
 
 def read_library():
+    if iTunesLibrary is None:
+        raise SystemExit("Reading the Music library needs macOS, with pyobjc-framework-iTunesLibrary installed")
+
     library, error = iTunesLibrary.ITLibrary.libraryWithAPIVersion_error_('1.0', None)
     if library is None:
         raise SystemExit("Unable to read the Music library: {0}".format(error))

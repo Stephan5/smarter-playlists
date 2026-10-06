@@ -279,6 +279,12 @@ class TestReadLibrary:
 
         assert read_library_as_dicts()[0]['track_id'] == expected
 
+    def test_reports_reading_needs_macos(self, monkeypatch):
+        monkeypatch.setattr(library, 'iTunesLibrary', None)
+
+        with pytest.raises(SystemExit, match='needs macOS'):
+            library.read_library()
+
     def test_reports_an_unreadable_library(self, monkeypatch):
         monkeypatch.setattr(library, 'iTunesLibrary', types.SimpleNamespace(
             ITLibrary=types.SimpleNamespace(libraryWithAPIVersion_error_=lambda version, error: (None, 'denied'))))

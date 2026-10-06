@@ -1,5 +1,7 @@
 # Smarter Playlists
 
+[![Tests](https://github.com/Stephan5/smarter-playlists/actions/workflows/tests.yml/badge.svg)](https://github.com/Stephan5/smarter-playlists/actions/workflows/tests.yml)
+
 Smarter Playlists lets you get the playlists you want by collecting your Apple Music library data over time, building a real play history, and writing playlists in SQL.
 
 It imports your Music library into PostgreSQL, keeps a history of every play, and exports SQL views back out to playlists in the Music app, including a playlist of your most played tracks for every month and year.
@@ -135,7 +137,7 @@ To stop running on a schedule:
 
 ## Tests
 
-The tests need Postgres installed (`pg_config` on the `PATH`) but not running: they start their own temporary server, so they never touch your database or Music library.
+The tests need Postgres installed (`initdb` or `pg_config` on the `PATH`) but not running: they start their own temporary server, so they never touch your database or Music library. They fake the Music library and app, so they run on Linux too.
 
 ```bash
 ./venv/bin/pip install -e '.[test]'

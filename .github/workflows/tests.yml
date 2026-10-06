@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    # Reading the Music library and talking to the Music app need macOS, but the tests fake both
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The tests start their own Postgres server, so only need it installed. Ubuntu runners come with it.
+      - name: Find Postgres
+        run: |
+          if ! ls -d /usr/lib/postgresql/*/bin > /dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql
+          fi
+          ls -d /usr/lib/postgresql/*/bin | sort --version-sort | tail -n 1 >> "$GITHUB_PATH"
+
+      - name: Install
+        run: pip install -e '.[test]'
+
+      - name: Test
+        run: pytest -v

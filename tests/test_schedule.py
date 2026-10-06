@@ -1,4 +1,5 @@
 import plistlib
+import shutil
 import subprocess
 import sys
 
@@ -55,6 +56,7 @@ def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
     assert launchctl.calls == [['bootstrap', schedule.domain(), str(schedule.agent_path())]]
 
 
+@pytest.mark.skipif(not shutil.which('plutil'), reason='plutil is only on macOS')
 def test_agent_is_a_valid_launchd_plist(home, launchctl):
     schedule.install('music', 0.5)
 

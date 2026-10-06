@@ -1,6 +1,7 @@
 import datetime
 import itertools
 import os
+import shutil
 import socket
 import subprocess
 
@@ -31,7 +32,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope='session')
 def postgres(tmp_path_factory):
     """A throwaway Postgres server, so tests never touch a real database."""
-    bin_dir = subprocess.run(['pg_config', '--bindir'], capture_output=True, text=True, check=True).stdout.strip()
+    bin_dir = postgres_bin_dir()
     data_dir = tmp_path_factory.mktemp('postgres')
     port = free_port()
 
@@ -46,6 +47,13 @@ def postgres(tmp_path_factory):
     finally:
         subprocess.run([os.path.join(bin_dir, 'pg_ctl'), '-D', data_dir, '-m', 'immediate', 'stop'],
                        capture_output=True)
+
+
+def postgres_bin_dir():
+    initdb = shutil.which('initdb')
+    if initdb:
+        return os.path.dirname(initdb)
+    return subprocess.run(['pg_config', '--bindir'], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def free_port():
