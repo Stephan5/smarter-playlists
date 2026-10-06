@@ -168,6 +168,58 @@ class TestPlays:
             """) == [(0,)]
 
 
+class TestPlayLog:
+
+    @pytest.fixture
+    def messages(self, caplog):
+        caplog.set_level('DEBUG')
+        return lambda level='INFO': [record.getMessage() for record in caplog.records
+                                     if record.levelname == level and record.getMessage().startswith(('Played',
+                                                                                                      'Recorded'))]
+
+    def local(self, time, date=True):
+        return time.astimezone().strftime('%Y-%m-%d %H:%M' if date else '%H:%M')
+
+    def test_logs_each_track_played(self, run_import, messages):
+        run_import(make_track(play_count=3, last_played_at=LAST_PLAYED),
+                   make_track(track_id='A000000000000002', title='Reckoner', play_count=1,
+                              last_played_at=LAST_PLAYED - datetime.timedelta(hours=1)))
+
+        assert messages() == [
+            "Played 'Reckoner' by Radiohead at {0}".format(self.local(LAST_PLAYED - datetime.timedelta(hours=1))),
+            "Played 'Weird Fishes / Arpeggi' by Radiohead at {0} (+2 estimated)".format(self.local(LAST_PLAYED)),
+            "Recorded 4 new plays (2 estimated) of 2 tracks",
+        ]
+
+    def test_leaves_out_the_date_for_plays_today(self, run_import, messages):
+        now = datetime.datetime.now(UTC).replace(microsecond=0)
+        run_import(make_track(play_count=1, last_played_at=now))
+
+        assert messages()[0] == "Played 'Weird Fishes / Arpeggi' by Radiohead at {0}".format(
+            self.local(now, date=False))
+
+    def test_logs_plays_only_estimated(self, run_import, query, messages):
+        run_import(make_track(play_count=1, last_played_at=LAST_PLAYED))
+        # Two more plays, but the same last play, so there's nothing observed to log a time for
+        run_import(make_track(play_count=3, last_played_at=LAST_PLAYED))
+
+        assert messages()[-2:] == ["Played 'Weird Fishes / Arpeggi' by Radiohead 2 times (estimated)",
+                                   "Recorded 2 new plays (2 estimated) of 1 track"]
+
+    def test_logs_when_nothing_was_played(self, run_import, messages, caplog):
+        run_import(make_track())
+
+        assert "No new plays" in caplog.messages
+
+    def test_only_logs_how_many_when_too_many_tracks_were_played(self, run_import, messages, monkeypatch):
+        monkeypatch.setattr(library, 'MAX_TRACKS_LOGGED', 1)
+        run_import(make_track(play_count=1, last_played_at=LAST_PLAYED),
+                   make_track(track_id='A000000000000002', title='Reckoner', play_count=1, last_played_at=LAST_PLAYED))
+
+        assert messages() == ["Recorded 2 new plays (0 estimated) of 2 tracks. Use --verbose to list them"]
+        assert len(messages('DEBUG')) == 2
+
+
 class FakeObject:
     """Stands in for iTunesLibrary objects, whose properties are all methods."""
 

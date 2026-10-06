@@ -38,52 +38,62 @@ def installed_agent(home):
 
 
 def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
-    for name in ('PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD'):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('PATH', '/opt/homebrew/bin:/usr/bin:/bin')
+    monkeypatch.delenv('SMARTER_PLAYLISTS_HOME', raising=False)
 
-    schedule.install('music', 2)
+    schedule.install(2)
 
     log = str(home / 'Library' / 'Logs' / 'smarter-playlists.log')
     assert installed_agent(home) == {
         'Label': 'local.smarter-playlists',
-        'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run', '--db', 'music'],
+        'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run'],
         'StartInterval': 7200,
         'RunAtLoad': True,
         'ProcessType': 'Background',
         'StandardOutPath': log,
         'StandardErrorPath': log,
+        'EnvironmentVariables': {'PATH': '/opt/homebrew/bin:/usr/bin:/bin'},
     }
     assert launchctl.calls == [['bootstrap', schedule.domain(), str(schedule.agent_path())]]
 
 
 @pytest.mark.skipif(not shutil.which('plutil'), reason='plutil is only on macOS')
 def test_agent_is_a_valid_launchd_plist(home, launchctl):
-    schedule.install('music', 0.5)
+    schedule.install(0.5)
 
     lint = subprocess.run(['plutil', '-lint', str(schedule.agent_path())], capture_output=True, text=True)
     assert lint.returncode == 0, lint.stdout
     assert installed_agent(home)['StartInterval'] == 1800
 
 
-def test_install_keeps_postgres_settings(home, launchctl, monkeypatch):
-    monkeypatch.setenv('PGHOST', 'db.local')
-    monkeypatch.setenv('PGPORT', '5433')
+def test_install_keeps_where_the_database_is(home, launchctl, monkeypatch):
+    monkeypatch.setenv('PATH', '/usr/bin:/bin')
+    monkeypatch.setenv('SMARTER_PLAYLISTS_HOME', '/Volumes/Music/smarter-playlists')
 
-    schedule.install('music', 2)
+    schedule.install(2)
 
-    assert installed_agent(home)['EnvironmentVariables'] == {'PGHOST': 'db.local', 'PGPORT': '5433'}
+    assert installed_agent(home)['EnvironmentVariables'] == {
+        'PATH': '/usr/bin:/bin',
+        'SMARTER_PLAYLISTS_HOME': '/Volumes/Music/smarter-playlists',
+    }
+
+
+def test_install_with_a_backup_dir(home, launchctl):
+    schedule.install(2, home / 'backups')
+
+    assert installed_agent(home)['ProgramArguments'][-3:] == ['run', '--backup-dir', str((home / 'backups').resolve())]
 
 
 def test_reinstall_replaces_the_agent(home, launchctl):
-    schedule.install('music', 2)
-    schedule.install('other', 4)
+    schedule.install(2)
+    schedule.install(4)
 
-    assert installed_agent(home)['ProgramArguments'][-1] == 'other'
+    assert installed_agent(home)['StartInterval'] == 4 * 60 * 60
     assert [call[0] for call in launchctl.calls] == ['bootstrap', 'bootout', 'bootstrap']
 
 
 def test_uninstall_unloads_and_removes_the_agent(home, launchctl):
-    schedule.install('music', 2)
+    schedule.install(2)
     schedule.uninstall()
 
     assert not schedule.agent_path().exists()
@@ -99,7 +109,7 @@ def test_uninstall_when_not_installed(home, launchctl):
 def test_status(home, launchctl, caplog):
     caplog.set_level('INFO')
     schedule.status()
-    schedule.install('music', 3)
+    schedule.install(3)
     schedule.status()
     launchctl.loaded = False
     schedule.status()

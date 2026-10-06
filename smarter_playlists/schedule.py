@@ -16,25 +16,29 @@ def log_path():
     return pathlib.Path.home() / 'Library' / 'Logs' / 'smarter-playlists.log'
 
 
-def agent(database_name, every_hours):
+def agent(every_hours, backup_dir=None):
     """A launchd agent that imports the library and exports playlists every few hours, and when you log in."""
+    arguments = [sys.executable, '-m', 'smarter_playlists', 'run']
+    if backup_dir:
+        arguments += ['--backup-dir', str(pathlib.Path(backup_dir).resolve())]
     definition = {
         'Label': LABEL,
-        'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run', '--db', database_name],
+        'ProgramArguments': arguments,
         'StartInterval': int(every_hours * 60 * 60),
         'RunAtLoad': True,
         'ProcessType': 'Background',
         'StandardOutPath': str(log_path()),
         'StandardErrorPath': str(log_path()),
     }
-    # launchd jobs don't see your shell's environment, so keep any Postgres connection settings
-    environment = {name: value for name, value in os.environ.items() if name.startswith('PG')}
+    # launchd jobs don't see your shell's environment, so keep the PATH, to find the same Postgres, and where the
+    # database is if it's been moved
+    environment = {name: os.environ[name] for name in ('PATH', 'SMARTER_PLAYLISTS_HOME') if os.environ.get(name)}
     if environment:
         definition['EnvironmentVariables'] = environment
     return definition
 
 
-def install(database_name, every_hours):
+def install(every_hours, backup_dir=None):
     path = agent_path()
     if path.exists():
         launchctl('bootout', service())
@@ -42,7 +46,7 @@ def install(database_name, every_hours):
     path.parent.mkdir(parents=True, exist_ok=True)
     log_path().parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'wb') as file:
-        plistlib.dump(agent(database_name, every_hours), file)
+        plistlib.dump(agent(every_hours, backup_dir), file)
 
     launchctl('bootstrap', domain(), str(path), check=True)
     logging.info("Scheduled to run every %g hours, starting now. Logging to %s", every_hours, log_path())

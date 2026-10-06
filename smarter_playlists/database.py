@@ -2,13 +2,36 @@ import importlib.resources
 import logging
 
 import psycopg
+from psycopg import sql
 
-DEFAULT_DATABASE = 'music'
+from . import server
+
+DATABASE = 'music'
 
 
-def connect(database_name):
-    # Host, port, user and password come from the standard PG* environment variables, or libpq's defaults
-    return psycopg.connect(dbname=database_name)
+def connect(database_name=DATABASE, **kwargs):
+    """Connects to a database on smarter-playlists' own server, which must be running."""
+    return psycopg.connect(**server.connection(database_name), **kwargs)
+
+
+def exists(database_name=DATABASE):
+    with connect('postgres') as admin:
+        return admin.execute("SELECT EXISTS (SELECT FROM pg_database WHERE datname = %s)",
+                             [database_name]).fetchone()[0]
+
+
+def create(database_name=DATABASE):
+    if not exists(database_name):
+        with connect('postgres', autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {0}").format(sql.Identifier(database_name)))
+
+
+def recreate(database_name=DATABASE):
+    """Drops the database, if there is one, and creates it again, empty."""
+    with connect('postgres', autocommit=True) as admin:
+        name = sql.Identifier(database_name)
+        admin.execute(sql.SQL("DROP DATABASE IF EXISTS {0} WITH (FORCE)").format(name))
+        admin.execute(sql.SQL("CREATE DATABASE {0}").format(name))
 
 
 def is_set_up(db):
@@ -20,7 +43,7 @@ def require_set_up(db):
         raise SystemExit("The database isn't set up yet. Run `smarter-playlists setup` first")
 
 
-def set_up(database_name):
+def set_up(database_name=DATABASE):
     with connect(database_name) as db:
         if is_set_up(db):
             raise SystemExit("The database is already set up")

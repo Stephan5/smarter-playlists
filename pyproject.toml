@@ -33,4 +33,5 @@ smarter_playlists = ["*.sql", "*.js"]
 testpaths = ["tests"]
 markers = [
     "integration: reads the real Music library and talks to the Music app (read-only). Run with --integration",
+    "writes_music: makes test playlists and folders in the Music app, then deletes them. Run with --write-music",
 ]

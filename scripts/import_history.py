@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Starts a new database from the play history of the original iTunes version of Smarter Playlists (2018-2021).
 
-    ./venv/bin/python scripts/import_history.py --db music_rebuilt --history music_2021
+    ./venv/bin/python scripts/import_history.py --history "dbname=music_2021"
 
-Run on a database that's set up but hasn't been imported into yet. It imports the Music library as
+The old database is on another Postgres server, e.g. Postgres.app, and `--history` is how to connect to it, as a libpq
+connection string. Run on a database that's set up but hasn't been imported into yet. It imports the Music library as
 `smarter-playlists import` does, but puts the plays from the old database underneath:
 
 * Real plays are kept. Plays recorded twice an hour apart when the clocks changed, and plays from 1904, are dropped.
@@ -20,7 +21,10 @@ import argparse
 import datetime
 import logging
 
-from smarter_playlists import database, library
+import psycopg
+
+from smarter_playlists import database, library, server
+from smarter_playlists.__main__ import LOG_DATE_FORMAT, LOG_FORMAT
 
 UTC = datetime.timezone.utc
 
@@ -64,25 +68,23 @@ HISTORY_TRACKS = """
 
 def main(arg_list=None):
     args = parse_args(arg_list)
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
-    import_with_history(args.database, args.history)
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+    with server.work(), server.running():
+        import_with_history(database.DATABASE, args.history)
 
 
 def parse_args(arg_list):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--db', '-d',
-                        help='Database to import into. It must be set up, and not imported into yet [%(default)s]',
-                        dest='database',
-                        default=database.DEFAULT_DATABASE)
     parser.add_argument('--history',
-                        help='Database made by the original iTunes version of Smarter Playlists',
+                        help='How to connect to the database made by the original iTunes version of Smarter '
+                             'Playlists, e.g. "dbname=music_2021"',
                         required=True)
     return parser.parse_args(arg_list)
 
 
-def import_with_history(database_name, history_database_name):
-    tracks, plays = read_history(history_database_name)
-    logging.info("Read %d tracks and %d plays from %s", len(tracks), len(plays), history_database_name)
+def import_with_history(database_name, history_conninfo):
+    tracks, plays = read_history(history_conninfo)
+    logging.info("Read %d tracks and %d plays from the old database", len(tracks), len(plays))
 
     logging.info("Reading the Music library...")
     library_tracks = library.read_library()
@@ -104,8 +106,8 @@ def import_with_history(database_name, history_database_name):
         library.record_plays(db)
 
 
-def read_history(history_database_name):
-    with database.connect(history_database_name) as history:
+def read_history(history_conninfo):
+    with psycopg.connect(history_conninfo) as history:
         tracks = history.execute(HISTORY_TRACKS).fetchall()
         plays = history.execute(HISTORY_PLAYS).fetchall()
 

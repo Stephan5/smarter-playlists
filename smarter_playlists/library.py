@@ -12,6 +12,9 @@ from . import database
 # Plays from before the first import are spread evenly from here up to the track's last play
 HISTORY_START = datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
 
+# Each track's new plays are logged, unless more tracks than this have them
+MAX_TRACKS_LOGGED = 100
+
 LIBRARY_COLUMNS = [
     ('track_id', 'TEXT'),
     ('title', 'TEXT'),
@@ -173,7 +176,7 @@ def record_plays(db):
     #
     # Only adding plays when the count goes up also stops the same play being recorded twice when the library reports
     # a slightly different last played time, as it does after the clocks change.
-    cur = db.execute("""
+    rows = db.execute("""
         WITH missing AS (
             SELECT t.track_id,
                    t.last_played_at,
@@ -186,27 +189,65 @@ def record_plays(db):
              WHERE t.last_played_at IS NOT NULL
              GROUP BY t.track_id
             HAVING t.play_count > COUNT(p.play_id)
+        ),
+        recorded AS (
+            INSERT INTO play (track_id, played_at, estimated)
+            SELECT track_id,
+                   last_played_at,
+                   FALSE
+              FROM missing
+             WHERE NOT has_last_play
+             UNION ALL
+            SELECT track_id,
+                   -- In seconds rather than days, which would shift by an hour across a clock change
+                   window_start + EXTRACT(EPOCH FROM last_played_at - window_start) * n / (estimates + 1)
+                                  * INTERVAL '1 second',
+                   TRUE
+              FROM (SELECT *,
+                           missing_plays - CASE WHEN has_last_play THEN 0 ELSE 1 END AS estimates
+                      FROM missing) AS m,
+                   generate_series(1, m.estimates) AS n
+                ON CONFLICT (track_id, played_at) DO NOTHING
+            RETURNING track_id, played_at, estimated
         )
-        INSERT INTO play (track_id, played_at, estimated)
-        SELECT track_id,
-               last_played_at,
-               FALSE
-          FROM missing
-         WHERE NOT has_last_play
-         UNION ALL
-        SELECT track_id,
-               -- In seconds rather than days, which would shift by an hour across a clock change
-               window_start + EXTRACT(EPOCH FROM last_played_at - window_start) * n / (estimates + 1)
-                              * INTERVAL '1 second',
-               TRUE
-          FROM (SELECT *,
-                       missing_plays - CASE WHEN has_last_play THEN 0 ELSE 1 END AS estimates
-                  FROM missing) AS m,
-               generate_series(1, m.estimates) AS n
-            ON CONFLICT (track_id, played_at) DO NOTHING
-        RETURNING estimated
-        """, {'history_start': HISTORY_START})
+        -- What was recorded for each track, for the log
+        SELECT t.title,
+               a.name,
+               MAX(r.played_at) FILTER (WHERE NOT r.estimated) AS played_at,
+               COUNT(*) FILTER (WHERE r.estimated) AS estimated
+          FROM recorded r
+          JOIN track t USING (track_id)
+          JOIN artist a USING (artist_id)
+         GROUP BY r.track_id, t.title, a.name
+         ORDER BY MAX(r.played_at), t.title
+        """, {'history_start': HISTORY_START}).fetchall()
 
-    estimated = [row[0] for row in cur.fetchall()]
-    logging.info("Recorded %d new plays (%d estimated)", len(estimated), sum(estimated))
+    log_plays(rows)
+
+
+def log_plays(rows):
+    """Logs each track's new plays, unless there are too many to read, as on the first import."""
+    level = logging.INFO if len(rows) <= MAX_TRACKS_LOGGED else logging.DEBUG
+    today = datetime.date.today()
+    for title, artist, played_at, estimated in rows:
+        if played_at:
+            played_at = played_at.astimezone()
+            when = played_at.strftime('%H:%M' if played_at.date() == today else '%Y-%m-%d %H:%M')
+            logging.log(level, "Played '%s' by %s at %s%s", title, artist, when,
+                        " (+{0} estimated)".format(estimated) if estimated else "")
+        else:
+            logging.log(level, "Played '%s' by %s %d %s (estimated)", title, artist, estimated,
+                        "time" if estimated == 1 else "times")
+
+    if not rows:
+        logging.info("No new plays")
+        return
+    observed = sum(1 for _, _, played_at, _ in rows if played_at)
+    estimated = sum(row[3] for row in rows)
+    logging.info("Recorded %s (%d estimated) of %s%s", plural(observed + estimated, 'new play'), estimated,
+                 plural(len(rows), 'track'), "" if level == logging.INFO else ". Use --verbose to list them")
+
+
+def plural(count, noun):
+    return '{0} {1}{2}'.format(count, noun, '' if count == 1 else 's')
 

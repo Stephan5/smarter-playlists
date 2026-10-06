@@ -96,6 +96,21 @@ class TestExport:
         with pytest.raises(SystemExit, match='Failed to update playlists in Music: Not authorized'):
             playlists.export_playlists(database_name)
 
+    def test_gives_up_when_music_takes_too_long(self, database_name, tracks, monkeypatch, caplog):
+        timeouts = []
+
+        def run(command, timeout, **kwargs):
+            timeouts.append(timeout)
+            raise playlists.subprocess.TimeoutExpired(command, timeout)
+        monkeypatch.setattr(playlists.subprocess, 'run', run)
+
+        with pytest.raises(SystemExit):
+            playlists.export_playlists(database_name)
+
+        assert timeouts == [15 * 60]
+        assert [record.levelname for record in caplog.records if 'within 15 minutes' in record.getMessage()] == [
+            'ERROR']
+
     def test_exports_playlists_chosen_by_path(self, database_name, query, tracks, no_builtin_playlists, music):
         query("CREATE VIEW playlist.v AS SELECT f AS folder, 'Same' AS playlist, track_id "
               "FROM track, (VALUES ('A'), ('B')) AS folders (f)")
@@ -303,24 +318,27 @@ def test_description_names_the_view_as_written_in_sql(view, written_as):
         'Made by Smarter Playlists from the {0} view.'.format(written_as))
 
 
-@pytest.mark.parametrize('result, dry_run, message', [
-    ({'created': True, 'moved': False, 'changed': True}, True, "Would create playlist 'F/P' with 1 tracks"),
-    ({'created': True, 'moved': False, 'changed': True}, False, "Created playlist 'F/P' with 1 tracks"),
-    ({'created': False, 'moved': True, 'changed': True}, True, "Would move and update playlist 'F/P' with 1 tracks"),
-    ({'created': False, 'moved': True, 'changed': True}, False, "Moved and updated playlist 'F/P' with 1 tracks"),
-    ({'created': False, 'moved': False, 'changed': True}, False, "Updated playlist 'F/P' with 1 tracks"),
-    ({'created': False, 'moved': False, 'changed': False}, False, "Playlist 'F/P' is already up to date"),
+@pytest.mark.parametrize('result, dry_run, level, message', [
+    ({'created': True, 'moved': False, 'changed': True}, True, 'INFO', "Would create playlist 'F/P' with 1 tracks"),
+    ({'created': True, 'moved': False, 'changed': True}, False, 'INFO', "Created playlist 'F/P' with 1 tracks"),
+    ({'created': False, 'moved': True, 'changed': True}, True, 'INFO',
+     "Would move and update playlist 'F/P' with 1 tracks"),
+    ({'created': False, 'moved': True, 'changed': True}, False, 'INFO', "Moved and updated playlist 'F/P' with 1 tracks"),
+    ({'created': False, 'moved': False, 'changed': True}, False, 'INFO', "Updated playlist 'F/P' with 1 tracks"),
+    # Only with --verbose, as most playlists are unchanged on most runs
+    ({'created': False, 'moved': False, 'changed': False}, False, 'DEBUG', "Playlist 'F/P' is already up to date"),
 ])
 def test_reports_what_changed(database_name, query, tracks, no_builtin_playlists, monkeypatch, caplog, result,
-                              dry_run, message):
+                              dry_run, level, message):
     query("CREATE VIEW playlist.v AS SELECT 'F' AS folder, 'P' AS playlist, track_id FROM track LIMIT 1")
     monkeypatch.setattr(playlists, 'run_sync_script', lambda request: json.dumps(
         [dict(result, tracks=1, missing=[], dryRun=dry_run)]))
-    caplog.set_level('INFO')
+    caplog.set_level('DEBUG')
 
     playlists.export_playlists(database_name, dry_run=dry_run)
 
-    assert [record.getMessage() for record in caplog.records] == [message]
+    assert [(record.levelname, record.getMessage()) for record in caplog.records] == [
+        ('INFO', "{0} 1 playlists in Music...".format("Checking" if dry_run else "Updating")), (level, message)]
 
 
 @pytest.mark.parametrize('time_zone, expected', [

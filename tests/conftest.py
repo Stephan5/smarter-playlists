@@ -1,14 +1,12 @@
 import datetime
 import itertools
-import os
 import shutil
-import socket
 import subprocess
+import tempfile
 
-import psycopg
 import pytest
 
-from smarter_playlists import database, library
+from smarter_playlists import database, library, server
 
 UTC = datetime.timezone.utc
 
@@ -18,64 +16,49 @@ DATABASE_NUMBERS = itertools.count()
 def pytest_addoption(parser):
     parser.addoption('--integration', action='store_true',
                      help='Also run tests that read the real Music library and talk to the Music app (read-only)')
+    parser.addoption('--write-music', action='store_true',
+                     help='Also run tests that make test playlists and folders in the Music app, then delete them')
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption('--integration'):
-        return
-    skip = pytest.mark.skip(reason='needs --integration')
+    skips = []
+    if not config.getoption('--integration'):
+        skips.append(('integration', pytest.mark.skip(reason='needs --integration')))
+    if not config.getoption('--write-music'):
+        skips.append(('writes_music', pytest.mark.skip(reason='needs --write-music')))
     for item in items:
-        if 'integration' in item.keywords:
-            item.add_marker(skip)
+        for keyword, skip in skips:
+            if keyword in item.keywords:
+                item.add_marker(skip)
 
 
 @pytest.fixture(scope='session')
-def postgres(tmp_path_factory):
-    """A throwaway Postgres server, so tests never touch a real database."""
-    bin_dir = postgres_bin_dir()
-    data_dir = tmp_path_factory.mktemp('postgres')
-    port = free_port()
-
-    subprocess.run([os.path.join(bin_dir, 'initdb'), '-D', data_dir, '-U', 'postgres', '--auth=trust',
-                    '-E', 'UTF8', '--locale=C'], capture_output=True, check=True)
-    # Temporary paths are too long for a Unix socket, so only listen on TCP
-    subprocess.run([os.path.join(bin_dir, 'pg_ctl'), '-D', data_dir, '-l', data_dir / 'postgres.log', '-w',
-                    '-o', "-p {0} -c listen_addresses=localhost -c unix_socket_directories='' -c fsync=off".format(port),
-                    'start'], capture_output=True, check=True)
-    try:
-        yield {'PGHOST': 'localhost', 'PGPORT': str(port), 'PGUSER': 'postgres'}
-    finally:
-        subprocess.run([os.path.join(bin_dir, 'pg_ctl'), '-D', data_dir, '-m', 'immediate', 'stop'],
-                       capture_output=True)
-
-
-def postgres_bin_dir():
-    initdb = shutil.which('initdb')
-    if initdb:
-        return os.path.dirname(initdb)
-    return subprocess.run(['pg_config', '--bindir'], capture_output=True, text=True, check=True).stdout.strip()
-
-
-def free_port():
-    with socket.socket() as s:
-        s.bind(('localhost', 0))
-        return s.getsockname()[1]
+def postgres():
+    """A throwaway Postgres server, run as smarter-playlists runs its own, so tests never touch the real database."""
+    # Short, as the socket goes in it, and with a space like ~/Library/Application Support
+    home = tempfile.mkdtemp(prefix='smarter playlists ', dir='/tmp')
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('SMARTER_PLAYLISTS_HOME', home)
+        server.init()
+        server.start(settings={'fsync': 'off'})
+        try:
+            yield home
+        finally:
+            subprocess.run([server.program('pg_ctl'), 'stop', '-D', server.data_dir(), '-m', 'immediate'],
+                           capture_output=True)
+            shutil.rmtree(home, ignore_errors=True)
 
 
 @pytest.fixture
 def empty_database(postgres, monkeypatch):
-    """The name of a new, empty database for a single test, with PG* variables set to connect to it."""
-    for name in ('PGPASSWORD', 'PGDATABASE', 'PGSERVICE', 'PGOPTIONS'):
-        monkeypatch.delenv(name, raising=False)
-    for name, value in postgres.items():
-        monkeypatch.setenv(name, value)
-
+    """The name of a new, empty database for a single test."""
+    monkeypatch.setenv('SMARTER_PLAYLISTS_HOME', postgres)
     name = 'test_{0}'.format(next(DATABASE_NUMBERS))
-    with psycopg.connect(dbname='postgres', autocommit=True) as admin:
+    with database.connect('postgres', autocommit=True) as admin:
         admin.execute('DROP DATABASE IF EXISTS {0}'.format(name))
         admin.execute('CREATE DATABASE {0}'.format(name))
     yield name
-    with psycopg.connect(dbname='postgres', autocommit=True) as admin:
+    with database.connect('postgres', autocommit=True) as admin:
         admin.execute('DROP DATABASE {0} WITH (FORCE)'.format(name))
 
 

@@ -42,6 +42,25 @@ def test_connects_to_database_by_name(database_name):
         assert db.execute("SELECT current_database()").fetchone() == (database_name,)
 
 
+def test_creates_a_database_only_if_missing(empty_database):
+    database.create(empty_database)
+    with database.connect(empty_database) as db:
+        db.execute("CREATE TABLE kept ()")
+
+    database.create(empty_database)
+
+    with database.connect(empty_database) as db:
+        assert database.exists(empty_database)
+        assert db.execute("SELECT to_regclass('kept')").fetchone()[0] is not None
+
+
+def test_recreates_a_database_empty(database_name):
+    database.recreate(database_name)
+
+    with database.connect(database_name) as db:
+        assert not database.is_set_up(db)
+
+
 def test_only_optional_values_are_nullable(database_name, query):
     # Everything else must always have a value
     assert query("""

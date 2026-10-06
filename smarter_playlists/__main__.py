@@ -1,57 +1,123 @@
 import argparse
 import logging
+import signal
+import subprocess
+import sys
 
-from . import database, library, playlists, schedule
+from . import backup, database, library, playlists, schedule, server
+
+LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
+LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 def main(arg_list=None):
     args = parse_args(arg_list)
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
-    args.command(args)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format=LOG_FORMAT,
+                        datefmt=LOG_DATE_FORMAT)
+    # launchd stops jobs with SIGTERM, which would otherwise leave the database running
+    signal.signal(signal.SIGTERM, exit_on_signal)
+    try:
+        args.command(args)
+    except SystemExit as exit:
+        # Log why it stopped, with a timestamp like everything else, rather than leave Python to print it
+        if isinstance(exit.code, str):
+            logging.error("%s", exit.code)
+            raise SystemExit(1) from None
+        raise
+    except Exception:
+        logging.exception("Failed")
+        raise SystemExit(1) from None
+
+
+def exit_on_signal(signum, frame):
+    logging.warning("Stopping, after %s", signal.Signals(signum).name)
+    raise SystemExit(128 + signum)
 
 
 def parse_args(arg_list):
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument('--db', '-d',
-                        help='Postgres database name. The host, port, user and password come from the standard PG* '
-                             'environment variables [%(default)s]',
-                        dest='database',
-                        default=database.DEFAULT_DATABASE)
+    common.add_argument('--verbose', '-v',
+                        help='Log more, e.g. every track played, even on the first import',
+                        action='store_true')
+    backups = argparse.ArgumentParser(add_help=False)
+    backups.add_argument('--backup-dir',
+                         help='Where to keep backups [{0}]'.format(backup.default_directory()),
+                         dest='backup_dir')
 
     parser = argparse.ArgumentParser(prog='smarter-playlists',
                                      description='Build a play history from your Apple Music library in Postgres, and '
                                                  'make playlists from it with SQL')
+    parser.set_defaults(verbose=False)
     commands = parser.add_subparsers(title='commands', required=True, metavar='command')
 
-    setup = commands.add_parser('setup', parents=[common], help='Create the tables and playlists in an empty database')
-    setup.set_defaults(command=lambda args: database.set_up(args.database))
+    setup_ = commands.add_parser('setup', parents=[common], help='Create the database')
+    setup_.set_defaults(command=setup)
 
-    import_ = commands.add_parser('import', parents=[common], help='Import the Music library')
-    import_.set_defaults(command=lambda args: library.import_library(args.database))
+    import_ = commands.add_parser('import', parents=[common, backups],
+                                  help='Back up the database, then import the Music library')
+    import_.set_defaults(command=import_library)
 
-    export = commands.add_parser('export', parents=[common], help='Export playlists to Music')
-    add_export_arguments(export)
-    export.set_defaults(command=lambda args: playlists.export_playlists(args.database, args.playlists, args.dry_run))
+    export_ = commands.add_parser('export', parents=[common], help='Export playlists to Music')
+    add_export_arguments(export_)
+    export_.set_defaults(command=export)
 
-    run = commands.add_parser('run', parents=[common], help='Import the Music library, then export playlists')
-    add_export_arguments(run)
-    run.set_defaults(command=run_all)
+    run_ = commands.add_parser('run', parents=[common, backups],
+                               help='Back up the database, import the Music library, then export playlists')
+    add_export_arguments(run_)
+    run_.set_defaults(command=run)
 
-    schedule_ = commands.add_parser('schedule', help='Run import and export every few hours')
+    backup_ = commands.add_parser('backup', parents=[common, backups], help='Back up the database')
+    backup_.set_defaults(command=take_backup)
+
+    restore_ = commands.add_parser('restore', parents=[common, backups],
+                                   help='Replace the database with a backup, backing it up first')
+    restore_.add_argument('dump', help='A backup, or any dump made with `pg_dump --format=custom`')
+    restore_.set_defaults(command=restore)
+
+    # Everything after `psql` goes to psql, so it doesn't take --verbose, which would steal psql's -v
+    psql_ = commands.add_parser('psql', help='Open psql on the database. Any arguments are passed to psql',
+                                add_help=False)
+    psql_.set_defaults(command=psql, psql_args=[])
+
+    db = commands.add_parser('db', help='Keep the database running, e.g. for other database tools')
+    db_commands = db.add_subparsers(title='commands', required=True, metavar='command')
+    db_start = db_commands.add_parser('start', parents=[common], help='Start the database, and keep it running')
+    db_start.add_argument('--port',
+                          help='Also listen on this port on localhost, for tools that need TCP',
+                          type=int)
+    db_start.set_defaults(command=lambda args: server.start_and_keep_running(args.port))
+    db_stop = db_commands.add_parser('stop', parents=[common],
+                                     help='Stop the database, now or when whatever is using it finishes')
+    db_stop.set_defaults(command=lambda args: server.stop_when_unused())
+    db_status = db_commands.add_parser('status', parents=[common, backups],
+                                       help='Show where the database is, whether it is running, and the latest backup')
+    db_status.set_defaults(command=status)
+
+    upgrade_ = commands.add_parser('upgrade', parents=[common],
+                                   help='Move the database to the newest installed Postgres')
+    upgrade_.set_defaults(command=upgrade)
+
+    schedule_ = commands.add_parser('schedule', help='Run every few hours')
     schedule_commands = schedule_.add_subparsers(title='commands', required=True, metavar='command')
-    install = schedule_commands.add_parser('install', parents=[common],
+    install = schedule_commands.add_parser('install', parents=[common, backups],
                                            help='Run every few hours, and when you log in, starting now')
     install.add_argument('--every',
                          help='Hours between runs [%(default)s]',
                          type=float,
                          default=2)
-    install.set_defaults(command=lambda args: schedule.install(args.database, args.every))
-    uninstall = schedule_commands.add_parser('uninstall', help='Stop running on a schedule')
+    install.set_defaults(command=lambda args: schedule.install(args.every, args.backup_dir))
+    uninstall = schedule_commands.add_parser('uninstall', parents=[common], help='Stop running on a schedule')
     uninstall.set_defaults(command=lambda args: schedule.uninstall())
-    status = schedule_commands.add_parser('status', help='Show whether, and how often, it runs on a schedule')
-    status.set_defaults(command=lambda args: schedule.status())
+    status_ = schedule_commands.add_parser('status', parents=[common],
+                                           help='Show whether, and how often, it runs on a schedule')
+    status_.set_defaults(command=lambda args: schedule.status())
 
-    return parser.parse_args(arg_list)
+    args, extra = parser.parse_known_args(arg_list)
+    if args.command is psql:
+        args.psql_args = extra
+    elif extra:
+        parser.error('unrecognized arguments: {0}'.format(' '.join(extra)))
+    return args
 
 
 def add_export_arguments(parser):
@@ -65,9 +131,69 @@ def add_export_arguments(parser):
                         action='store_true')
 
 
-def run_all(args):
-    library.import_library(args.database)
-    playlists.export_playlists(args.database, args.playlists, args.dry_run)
+def setup(args):
+    if not server.initialised():
+        server.init()
+    with server.work(), server.running():
+        database.create()
+        database.set_up()
+
+
+def import_library(args):
+    with server.work(), server.running():
+        backup.take(args.backup_dir)
+        library.import_library(database.DATABASE)
+
+
+def export(args):
+    with server.work(), server.running():
+        playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
+
+
+def run(args):
+    # Runs are added one after another to the schedule's log, so mark where each starts
+    print(file=sys.stderr)
+    logging.info("===== Run started%s =====", " (dry run)" if args.dry_run else "")
+    with server.work(), server.running():
+        backup.take(args.backup_dir)
+        library.import_library(database.DATABASE)
+        playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
+
+
+def take_backup(args):
+    with server.work(), server.running():
+        backup.take(args.backup_dir)
+
+
+def restore(args):
+    if not server.initialised():
+        server.init()
+    with server.work(), server.running():
+        backup.restore(args.dump, args.backup_dir)
+
+
+def upgrade(args):
+    with server.work():
+        backup.upgrade()
+
+
+def psql(args):
+    with server.running():
+        # Ctrl-C is for psql, to cancel a query, so it mustn't stop us before the database is stopped
+        previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            returncode = subprocess.run([server.program('psql'), *args.psql_args],
+                                        env=server.environment(database.DATABASE)).returncode
+        finally:
+            signal.signal(signal.SIGINT, previous)
+    if returncode:
+        raise SystemExit(returncode)
+
+
+def status(args):
+    server.status()
+    latest = backup.latest(args.backup_dir)
+    logging.info("Latest backup: %s", latest or "none yet")
 
 
 if __name__ == '__main__':

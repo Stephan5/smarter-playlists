@@ -6,7 +6,7 @@ import psycopg
 import pytest
 
 from conftest import DATABASE_NUMBERS, UTC, make_track
-from smarter_playlists import library
+from smarter_playlists import database, library, server
 
 spec = importlib.util.spec_from_file_location(
     'import_history', os.path.join(os.path.dirname(__file__), '..', 'scripts', 'import_history.py'))
@@ -35,21 +35,22 @@ def at(text):
 def history(postgres, empty_database):
     """An old database, with .track() and .play() to fill it."""
     name = 'history_{0}'.format(next(DATABASE_NUMBERS))
-    with psycopg.connect(dbname='postgres', autocommit=True) as admin:
+    with database.connect('postgres', autocommit=True) as admin:
         admin.execute('CREATE DATABASE {0}'.format(name))
-    with psycopg.connect(dbname=name) as db:
+    conninfo = psycopg.conninfo.make_conninfo(**server.connection(name))
+    with psycopg.connect(conninfo) as db:
         db.execute(OLD_SCHEMA)
 
     class History:
         def __init__(self):
-            self.name = name
+            self.conninfo = conninfo
             self.next_id = 1
 
         def track(self, title='Weird Fishes / Arpeggi', artist='Radiohead', album='In Rainbows', play_count=0,
                   last_played=None, plays=()):
             track_id = self.next_id
             self.next_id += 1
-            with psycopg.connect(dbname=name) as db:
+            with psycopg.connect(conninfo) as db:
                 db.execute("INSERT INTO artist VALUES (%s, %s)", [track_id, artist])
                 db.execute("INSERT INTO album VALUES (%s, %s, %s, NULL)", [track_id, album, track_id])
                 db.execute("INSERT INTO track VALUES (%s, %s, 1000, %s, %s, %s, %s, NULL, 1, %s, NULL, FALSE)",
@@ -60,7 +61,7 @@ def history(postgres, empty_database):
             return track_id
 
     yield History()
-    with psycopg.connect(dbname='postgres', autocommit=True) as admin:
+    with database.connect('postgres', autocommit=True) as admin:
         admin.execute('DROP DATABASE {0} WITH (FORCE)'.format(name))
 
 
@@ -69,7 +70,7 @@ def run(database_name, history, monkeypatch):
     """Imports the given library tracks, with the history underneath."""
     def run(*tracks):
         monkeypatch.setattr(library, 'read_library', lambda: list(tracks))
-        import_history.import_with_history(database_name, history.name)
+        import_history.import_with_history(database_name, history.conninfo)
     return run
 
 

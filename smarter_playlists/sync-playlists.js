@@ -63,8 +63,7 @@ function syncPlaylist(Music, library, databaseIds, folders, descriptionPrefix,
   }
 
   if (!playlist) {
-    playlist = Music.make({ new: 'userPlaylist', withProperties: { name, description } });
-    folders.moveInto(playlist, folder);
+    playlist = folders.make('userPlaylist', { name, description }, folder);
   } else {
     if (moved) {
       folders.moveInto(playlist, folder);
@@ -151,7 +150,7 @@ class Folders {
     return existing ? existing.persistentID() : undefined;
   }
 
-  // Moves a playlist or folder into the given folder, creating any folders that don't exist
+  // Moves a playlist into the given folder, creating any folders that don't exist
   moveInto(item, folder) {
     if (folder.length === 0) {
       return;
@@ -159,12 +158,17 @@ class Folders {
     this.Music.move(item, { to: this.findOrCreate(folder) });
   }
 
+  // Makes a playlist or folder in the given folder, creating any folders that don't exist. It's made in place, as with
+  // iCloud Music Library, something made at the top level and moved straight away is soon put back at the top level.
+  make(kind, properties, folder) {
+    const location = folder.length === 0 ? {} : { at: this.findOrCreate(folder) };
+    return this.Music.make({ new: kind, withProperties: properties, ...location });
+  }
+
   findOrCreate(folder) {
     const path = folder.join('/');
     if (!this.byPath[path]) {
-      const created = this.Music.make({ new: 'folderPlaylist', withProperties: { name: folder[folder.length - 1] } });
-      this.moveInto(created, folder.slice(0, -1));
-      this.byPath[path] = created;
+      this.byPath[path] = this.make('folderPlaylist', { name: folder[folder.length - 1] }, folder.slice(0, -1));
     }
     return this.byPath[path];
   }

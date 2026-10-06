@@ -18,6 +18,10 @@ DESCRIPTION_PREFIX = 'Made by Smarter Playlists'
 
 SYNC_PLAYLISTS_SCRIPT = str(importlib.resources.files(__package__).joinpath('sync-playlists.js'))
 
+# Updating many playlists takes Music a minute or two. Much longer and it's stuck, e.g. behind a dialog, and would
+# otherwise hold up every scheduled run after this one.
+SYNC_TIMEOUT_MINUTES = 15
+
 
 @dataclasses.dataclass
 class Playlist:
@@ -33,12 +37,8 @@ class Playlist:
 
     @property
     def description(self):
-        # Names the view as it would be written in SQL
-        view = self.view
-        if not re.fullmatch('[a-z_][a-z0-9_]*', view):
-            view = '"{0}"'.format(view.replace('"', '""'))
-        return "{0} from the {1}.{2} view. Changes made here will be overwritten. {3}".format(
-            DESCRIPTION_PREFIX, PLAYLISTS_SCHEMA, view, PROJECT_URL)
+        return ("{0} from the {1} view. Changes made here will be overwritten. {2}"
+                .format(DESCRIPTION_PREFIX, self.view, PROJECT_URL))
 
 
 def export_playlists(database_name, names=(), dry_run=False):
@@ -53,6 +53,8 @@ def export_playlists(database_name, names=(), dry_run=False):
         logging.warning("No playlists found in the %s schema", PLAYLISTS_SCHEMA)
         return
 
+    # Music takes a while, a minute or more, to update many playlists
+    logging.info("%s %d playlists in Music...", "Checking" if dry_run else "Updating", len(playlists))
     failed = 0
     for playlist, result in zip(playlists.values(), sync_playlists(playlists, dry_run)):
         if 'error' in result:
@@ -64,7 +66,7 @@ def export_playlists(database_name, names=(), dry_run=False):
             logging.warning("Track %s in '%s' was not found in the Music library", track_id, playlist.path)
 
         if not result['changed']:
-            logging.info("Playlist '%s' is already up to date", playlist.path)
+            logging.debug("Playlist '%s' is already up to date", playlist.path)
         else:
             if result['created']:
                 action = 'Would create' if dry_run else 'Created'
@@ -153,8 +155,14 @@ def sync_playlists(playlists, dry_run):
 
 
 def run_sync_script(request):
-    process = subprocess.run(['/usr/bin/osascript', '-l', 'JavaScript', SYNC_PLAYLISTS_SCRIPT],
-                             input=request, capture_output=True, text=True)
+    try:
+        process = subprocess.run(['/usr/bin/osascript', '-l', 'JavaScript', SYNC_PLAYLISTS_SCRIPT],
+                                 input=request, capture_output=True, text=True, timeout=SYNC_TIMEOUT_MINUTES * 60)
+    except subprocess.TimeoutExpired:
+        logging.error("Music didn't finish updating playlists within %d minutes, so gave up. Check Music isn't "
+                      "showing a dialog. Any playlists left part-updated will be fixed by the next export",
+                      SYNC_TIMEOUT_MINUTES)
+        raise SystemExit(1)
     if process.returncode != 0:
         raise SystemExit("Failed to update playlists in Music: {0}".format(process.stderr.strip()))
     return process.stdout
