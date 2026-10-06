@@ -92,7 +92,7 @@ def select_playlists(playlists, names):
 
 
 def fetch_playlists(db):
-    """Every playlist defined in the playlists schema, as {path: Playlist}.
+    """Every playlist defined in the playlist schema, as {path: Playlist}.
 
     A view is one playlist named after the view, or many if it has a playlist column naming the playlist of each row.
     An optional folder column puts playlists in a folder, with / between nested folders.

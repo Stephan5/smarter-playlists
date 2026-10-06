@@ -15,7 +15,7 @@ def tracks(run_import):
 
 @pytest.fixture
 def no_builtin_playlists(query):
-    query("DROP SCHEMA playlists CASCADE; CREATE SCHEMA playlists")
+    query("DROP SCHEMA playlist CASCADE; CREATE SCHEMA playlist")
 
 
 @pytest.fixture
@@ -45,9 +45,9 @@ def exported(requests):
 class TestExport:
 
     def test_exports_every_playlist_in_one_request(self, database_name, query, tracks, no_builtin_playlists, music):
-        query("""CREATE VIEW playlists."Most Played" AS
+        query("""CREATE VIEW playlist."Most Played" AS
                  SELECT track_id, ROW_NUMBER() OVER (ORDER BY play_count DESC) AS position FROM track""")
-        query("""CREATE VIEW playlists."Least Played" AS
+        query("""CREATE VIEW playlist."Least Played" AS
                  SELECT track_id, ROW_NUMBER() OVER (ORDER BY play_count) AS position FROM track LIMIT 2""")
         query("CREATE VIEW public.not_a_playlist AS SELECT track_id FROM track")
 
@@ -61,8 +61,8 @@ class TestExport:
         }
 
     def test_exports_only_named_playlists(self, database_name, query, tracks, no_builtin_playlists, music):
-        query("CREATE VIEW playlists.\"One\" AS SELECT track_id FROM track")
-        query("CREATE VIEW playlists.\"Two\" AS SELECT track_id FROM track")
+        query("CREATE VIEW playlist.\"One\" AS SELECT track_id FROM track")
+        query("CREATE VIEW playlist.\"Two\" AS SELECT track_id FROM track")
 
         playlists.export_playlists(database_name, ['Two'])
 
@@ -80,8 +80,8 @@ class TestExport:
         assert [request['dryRun'] for request in music.requests] == [True]
 
     def test_carries_on_when_a_playlist_fails(self, database_name, query, tracks, no_builtin_playlists, music):
-        query("CREATE VIEW playlists.\"Music\" AS SELECT track_id FROM track")
-        query("CREATE VIEW playlists.\"Mine\" AS SELECT track_id FROM track")
+        query("CREATE VIEW playlist.\"Music\" AS SELECT track_id FROM track")
+        query("CREATE VIEW playlist.\"Mine\" AS SELECT track_id FROM track")
         music.errors['Music'] = '"Music" is a smart playlist or folder and cannot be replaced'
 
         with pytest.raises(SystemExit, match='Failed to export 1 of 2 playlists'):
@@ -97,7 +97,7 @@ class TestExport:
             playlists.export_playlists(database_name)
 
     def test_exports_playlists_chosen_by_path(self, database_name, query, tracks, no_builtin_playlists, music):
-        query("CREATE VIEW playlists.v AS SELECT f AS folder, 'Same' AS playlist, track_id "
+        query("CREATE VIEW playlist.v AS SELECT f AS folder, 'Same' AS playlist, track_id "
               "FROM track, (VALUES ('A'), ('B')) AS folders (f)")
 
         playlists.export_playlists(database_name, ['B/Same'])
@@ -107,7 +107,7 @@ class TestExport:
 
     def test_exports_every_playlist_with_a_chosen_name(self, database_name, query, tracks, no_builtin_playlists,
                                                        music):
-        query("CREATE VIEW playlists.v AS SELECT f AS folder, 'Same' AS playlist, track_id "
+        query("CREATE VIEW playlist.v AS SELECT f AS folder, 'Same' AS playlist, track_id "
               "FROM track, (VALUES ('A'), ('B')) AS folders (f)")
 
         playlists.export_playlists(database_name, ['Same'])
@@ -126,7 +126,7 @@ class TestExport:
 
         [playlist] = music.requests[0]['playlists']
         assert playlist['description'] == (
-            'Made by Smarter Playlists from the playlists."All-Time Favourites" view. Changes made here will be '
+            'Made by Smarter Playlists from the playlist."All-Time Favourites" view. Changes made here will be '
             'overwritten. https://github.com/Stephan5/smarter-playlists')
 
     def test_requires_database_setup(self, empty_database, music):
@@ -144,26 +144,26 @@ class TestFetchPlaylists:
         return run
 
     def test_orders_by_position(self, query, fetch):
-        query("""CREATE VIEW playlists.v AS
+        query("""CREATE VIEW playlist.v AS
                  SELECT track_id, 6 - play_count AS position FROM track ORDER BY track_id""")
 
         assert fetch() == {'v': ['A000000000000005', 'A000000000000004', 'A000000000000003', 'A000000000000002',
                                  'A000000000000001']}
 
     def test_keeps_view_order_without_position(self, query, fetch):
-        query("CREATE VIEW playlists.v AS SELECT track_id FROM track ORDER BY play_count DESC LIMIT 2")
+        query("CREATE VIEW playlist.v AS SELECT track_id FROM track ORDER BY play_count DESC LIMIT 2")
 
         assert fetch() == {'v': ['A000000000000005', 'A000000000000004']}
 
     def test_keeps_first_position_of_duplicate_tracks(self, query, fetch):
-        query("""CREATE VIEW playlists.v AS
+        query("""CREATE VIEW playlist.v AS
                  SELECT * FROM (VALUES ('A000000000000002', 1), ('A000000000000001', 2), ('A000000000000002', 3),
                                        (NULL, 4)) AS v (track_id, position)""")
 
         assert fetch() == {'v': ['A000000000000002', 'A000000000000001']}
 
     def test_playlist_column_makes_a_playlist_per_value(self, query, fetch):
-        query("""CREATE VIEW playlists.v AS
+        query("""CREATE VIEW playlist.v AS
                  SELECT * FROM (VALUES ('Odd', 'A000000000000003', 2), ('Even', 'A000000000000002', 1),
                                        ('Odd', 'A000000000000001', 1), (NULL, 'A000000000000004', 1))
                                 AS v (playlist, track_id, position)""")
@@ -171,7 +171,7 @@ class TestFetchPlaylists:
         assert fetch() == {'Even': ['A000000000000002'], 'Odd': ['A000000000000001', 'A000000000000003']}
 
     def test_folder_column_puts_playlists_in_folders(self, query, fetch):
-        query("""CREATE VIEW playlists.v AS
+        query("""CREATE VIEW playlist.v AS
                  SELECT * FROM (VALUES ('Outer/Inner', 'Nested', 'A000000000000001'),
                                        ('/Outer//', 'Outer', 'A000000000000002'),
                                        (NULL, 'Top', 'A000000000000003'),
@@ -186,14 +186,14 @@ class TestFetchPlaylists:
         }
 
     def test_playlists_must_have_unique_names(self, query, fetch):
-        query("CREATE VIEW playlists.a AS SELECT 'F' AS folder, 'Mine' AS playlist, track_id FROM track")
-        query("CREATE VIEW playlists.b AS SELECT 'F' AS folder, 'Mine' AS playlist, track_id FROM track")
+        query("CREATE VIEW playlist.a AS SELECT 'F' AS folder, 'Mine' AS playlist, track_id FROM track")
+        query("CREATE VIEW playlist.b AS SELECT 'F' AS folder, 'Mine' AS playlist, track_id FROM track")
 
         with pytest.raises(SystemExit, match="Playlist 'F/Mine' is defined by both a and b"):
             fetch()
 
     def test_requires_a_track_id_column(self, query, fetch):
-        query("CREATE VIEW playlists.v AS SELECT title FROM track")
+        query("CREATE VIEW playlist.v AS SELECT title FROM track")
 
         with pytest.raises(SystemExit, match="View 'v' has no track_id column"):
             fetch()
@@ -294,9 +294,9 @@ class TestBuiltinPlaylists:
 
 
 @pytest.mark.parametrize('view, written_as', [
-    ('monthly', 'playlists.monthly'),
-    ('All-Time Favourites', 'playlists."All-Time Favourites"'),
-    ('say "hi"', 'playlists."say ""hi"""'),
+    ('monthly', 'playlist.monthly'),
+    ('All-Time Favourites', 'playlist."All-Time Favourites"'),
+    ('say "hi"', 'playlist."say ""hi"""'),
 ])
 def test_description_names_the_view_as_written_in_sql(view, written_as):
     assert playlists.Playlist('Name', view, []).description.startswith(
@@ -313,7 +313,7 @@ def test_description_names_the_view_as_written_in_sql(view, written_as):
 ])
 def test_reports_what_changed(database_name, query, tracks, no_builtin_playlists, monkeypatch, caplog, result,
                               dry_run, message):
-    query("CREATE VIEW playlists.v AS SELECT 'F' AS folder, 'P' AS playlist, track_id FROM track LIMIT 1")
+    query("CREATE VIEW playlist.v AS SELECT 'F' AS folder, 'P' AS playlist, track_id FROM track LIMIT 1")
     monkeypatch.setattr(playlists, 'run_sync_script', lambda request: json.dumps(
         [dict(result, tracks=1, missing=[], dryRun=dry_run)]))
     caplog.set_level('INFO')

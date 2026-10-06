@@ -13,14 +13,23 @@ def test_creates_tables(database_name, query):
         """) == [('album',), ('artist',), ('play',), ('track',)]
 
 
+def test_creates_only_the_playlist_schema(database_name, query):
+    assert query("""
+        SELECT nspname
+          FROM pg_namespace
+         WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
+         ORDER BY 1
+        """) == [('playlist',), ('public',)]
+
+
 def test_creates_builtin_playlists(database_name, query, run_import):
     run_import(make_track())
 
-    views = query("SELECT table_name FROM information_schema.views WHERE table_schema = 'playlists' ORDER BY 1")
+    views = query("SELECT table_name FROM information_schema.views WHERE table_schema = 'playlist' ORDER BY 1")
     assert views == [('All-Time Favourites',), ('Forgotten Favourites',), ('Last Month',), ('Rising',), ('monthly',),
                      ('top_artists',), ('yearly',)]
     for (view,) in views:
-        query('SELECT track_id, position FROM playlists."{0}"'.format(view))
+        query('SELECT track_id, position FROM playlist."{0}"'.format(view))
 
 
 def test_refuses_to_run_twice(database_name):

@@ -1,4 +1,4 @@
--- Playlists created by `smarter-playlists setup`. Every view in the playlists schema is exported to Music.
+-- Playlists created by `smarter-playlists setup`. Every view in the playlist schema is exported to Music.
 --
 -- A view needs a track_id column, and is ordered by its position column if it has one. It's exported as a playlist
 -- named after the view, or, if it has a playlist column, as one playlist for each distinct value of that column.

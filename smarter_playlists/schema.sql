@@ -49,6 +49,3 @@ CREATE TABLE play (
 );
 
 CREATE INDEX idx_play_played_at ON play (played_at);
-
--- Every view in this schema is exported to Music by `smarter-playlists export`, see playlists.sql
-CREATE SCHEMA playlists;
