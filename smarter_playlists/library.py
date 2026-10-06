@@ -168,7 +168,17 @@ def update_tracks(db):
            AND NOT EXISTS (SELECT FROM library WHERE library.track_id = track.track_id)
         """)
     if cur.rowcount:
+        removed = db.execute("""
+            SELECT title, name
+              FROM track
+              JOIN artist USING (artist_id)
+             WHERE removed_at IS NOT NULL
+             ORDER BY removed_at DESC
+             LIMIT %s
+            """, (cur.rowcount,)).fetchall()
         logging.warning("%d tracks are no longer in the library", cur.rowcount)
+        for title, artist in removed:
+            logging.warning("  - '%s' by %s", title, artist)
 
 
 def record_plays(db):
