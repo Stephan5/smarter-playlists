@@ -46,7 +46,7 @@ def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
     log = str(home / 'Library' / 'Logs' / 'smarter-playlists.log')
     assert installed_agent(home) == {
         'Label': 'local.smarter-playlists',
-        'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run'],
+        'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run', '--scheduled'],
         'StartInterval': 7200,
         'RunAtLoad': True,
         'ProcessType': 'Background',
@@ -81,7 +81,8 @@ def test_install_keeps_where_the_database_is(home, launchctl, monkeypatch):
 def test_install_with_a_backup_dir(home, launchctl):
     schedule.install(2, home / 'backups')
 
-    assert installed_agent(home)['ProgramArguments'][-3:] == ['run', '--backup-dir', str((home / 'backups').resolve())]
+    assert installed_agent(home)['ProgramArguments'][-4:] == ['run', '--scheduled', '--backup-dir',
+                                                              str((home / 'backups').resolve())]
 
 
 def test_reinstall_replaces_the_agent(home, launchctl):

@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import logging
 import re
 import signal
@@ -7,21 +8,24 @@ import subprocess
 import pytest
 
 from smarter_playlists import __main__ as cli
-from smarter_playlists import backup, database, library, playlists, schedule, server
+from smarter_playlists import backup, database, history, library, playlists, schedule, server, stats
 
 
 @pytest.fixture
 def calls(monkeypatch):
     """Records which commands run, with what arguments, instead of running them."""
-    recorded = []
+    class Calls(list):
+        """The calls made, in order, and the runs recorded."""
 
-    def record(name):
-        return lambda *args: recorded.append((name, *args))
+    recorded = Calls()
+
+    def record(name, result=None):
+        return lambda *args: recorded.append((name, *args)) or result
 
     @contextlib.contextmanager
-    def context(name):
+    def context(name, value=None):
         recorded.append(name)
-        yield
+        yield value
         recorded.append('/' + name)
 
     monkeypatch.setattr(server, 'initialised', lambda: True)
@@ -35,8 +39,14 @@ def calls(monkeypatch):
     monkeypatch.setattr(backup, 'take', record('backup'))
     monkeypatch.setattr(backup, 'restore', record('restore'))
     monkeypatch.setattr(backup, 'upgrade', record('upgrade'))
-    monkeypatch.setattr(library, 'import_library', record('import'))
-    monkeypatch.setattr(playlists, 'export_playlists', record('export'))
+    runs = []
+    monkeypatch.setattr(history, 'recorded', lambda scheduled, dry_run: context(
+        'recorded{0}{1}'.format(' scheduled' if scheduled else '', ' dry run' if dry_run else ''),
+        runs.append(history.Run()) or runs[-1]))
+    recorded.runs = runs
+    monkeypatch.setattr(history, 'log_summary', record('summary'))
+    monkeypatch.setattr(library, 'import_library', record('import', (3, 1)))
+    monkeypatch.setattr(playlists, 'export_playlists', record('export', 2))
     monkeypatch.setattr(schedule, 'install', record('install'))
     monkeypatch.setattr(schedule, 'uninstall', record('uninstall'))
     monkeypatch.setattr(schedule, 'status', record('status'))
@@ -51,8 +61,11 @@ def calls(monkeypatch):
     (['export'], ['work', 'running', ('export', 'music', [], False), '/running', '/work']),
     (['export', '--dry-run', 'October 2026', '2026'],
      ['work', 'running', ('export', 'music', ['October 2026', '2026'], True), '/running', '/work']),
-    (['run', '-v'], ['work', 'running', ('backup', None), ('import', 'music'), ('export', 'music', [], False),
-                     '/running', '/work']),
+    (['run', '-v'], ['work', 'running', 'recorded', ('backup', None), ('import', 'music'),
+                     ('export', 'music', [], False), '/recorded', '/running', '/work']),
+    (['run', '--scheduled', '--dry-run'], ['work', 'running', 'recorded scheduled dry run', ('backup', None),
+                                           ('import', 'music'), ('export', 'music', [], True), '/recorded scheduled dry run',
+                                           '/running', '/work']),
     (['backup'], ['work', 'running', ('backup', None), '/running', '/work']),
     (['restore', 'old.dump'], ['work', 'running', ('restore', 'old.dump', None), '/running', '/work']),
     (['upgrade'], ['work', ('upgrade',), '/work']),
@@ -62,7 +75,7 @@ def calls(monkeypatch):
     (['schedule', 'install'], [('install', 2, None)]),
     (['schedule', 'install', '--every', '6', '--backup-dir', '/backups'], [('install', 6, '/backups')]),
     (['schedule', 'uninstall'], [('uninstall',)]),
-    (['schedule', 'status'], [('status',)]),
+    (['schedule', 'status'], [('status',), 'running', ('summary',), '/running']),
 ])
 def test_commands(calls, arguments, expected):
     cli.main(arguments)
@@ -80,6 +93,66 @@ def test_run_starts_with_a_header(calls, caplog, capsys):
         '===== Run started =====', '===== Run started (dry run) =====']
     # With a blank line before each, to separate it from the run before
     assert capsys.readouterr().err == '\n\n'
+
+
+def test_run_records_what_it_did(calls):
+    cli.main(['run'])
+
+    assert calls.runs == [history.Run(plays_recorded=3, plays_estimated=1, playlists_changed=2, playlists_failed=0)]
+
+
+def test_run_records_failed_exports(calls, monkeypatch):
+    def fail(*args):
+        raise playlists.ExportFailed(changed=4, failed=1, total=9)
+    monkeypatch.setattr(playlists, 'export_playlists', fail)
+
+    with pytest.raises(SystemExit):
+        cli.main(['run'])
+
+    assert calls.runs == [history.Run(plays_recorded=3, plays_estimated=1, playlists_changed=4, playlists_failed=1)]
+
+
+@pytest.mark.parametrize('arguments, notified', [
+    (['run', '--scheduled'], ['Failed to export 1 of 9 playlists']),
+    (['run'], []),
+])
+def test_only_scheduled_runs_notify_of_failures(calls, monkeypatch, arguments, notified):
+    def fail(*args):
+        raise playlists.ExportFailed(changed=4, failed=1, total=9)
+    monkeypatch.setattr(playlists, 'export_playlists', fail)
+    notifications = []
+    monkeypatch.setattr(schedule, 'notify_failure', notifications.append)
+
+    with pytest.raises(SystemExit):
+        cli.main(arguments)
+
+    assert notifications == notified
+
+
+def test_scheduled_runs_notify_of_unexpected_errors(calls, monkeypatch):
+    def fail(*args):
+        raise ValueError('oops')
+    monkeypatch.setattr(library, 'import_library', fail)
+    notifications = []
+    monkeypatch.setattr(schedule, 'notify_failure', notifications.append)
+
+    with pytest.raises(SystemExit):
+        cli.main(['run', '--scheduled'])
+
+    assert notifications == ['ValueError: oops']
+
+
+@pytest.mark.parametrize('arguments, expected', [
+    (['stats'], (datetime.date.today().year, 10)),
+    (['stats', '2025', '--top', '5'], (2025, 5)),
+])
+def test_stats(calls, monkeypatch, capsys, arguments, expected):
+    monkeypatch.setattr(stats, 'report', lambda year, top: calls.append(('stats', year, top)) or ['2025 in review'])
+
+    cli.main(arguments)
+
+    assert calls == ['running', ('stats', *expected), '/running']
+    assert capsys.readouterr().out == '2025 in review\n'
 
 
 def test_setup_creates_the_cluster_first(calls, monkeypatch):

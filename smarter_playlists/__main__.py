@@ -1,10 +1,11 @@
 import argparse
+import datetime
 import logging
 import signal
 import subprocess
 import sys
 
-from . import backup, database, library, playlists, schedule, server
+from . import backup, database, history, library, playlists, schedule, server, stats
 
 LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -19,14 +20,23 @@ def main(arg_list=None):
     try:
         args.command(args)
     except SystemExit as exit:
+        if exit.code in (None, 0):
+            raise
         # Log why it stopped, with a timestamp like everything else, rather than leave Python to print it
         if isinstance(exit.code, str):
             logging.error("%s", exit.code)
-            raise SystemExit(1) from None
-        raise
-    except Exception:
+        notify_if_scheduled(args, history.describe(exit))
+        raise SystemExit(1 if isinstance(exit.code, str) else exit.code) from None
+    except Exception as error:
         logging.exception("Failed")
+        notify_if_scheduled(args, history.describe(error))
         raise SystemExit(1) from None
+
+
+def notify_if_scheduled(args, message):
+    # Runs you start yourself show their errors in the terminal
+    if getattr(args, 'scheduled', False):
+        schedule.notify_failure(message)
 
 
 def exit_on_signal(signum, frame):
@@ -64,7 +74,22 @@ def parse_args(arg_list):
     run_ = commands.add_parser('run', parents=[common, backups],
                                help='Back up the database, import the Music library, then export playlists')
     add_export_arguments(run_)
+    run_.add_argument('--scheduled',
+                      help='Record the run as scheduled, and show a notification if it fails',
+                      action='store_true')
     run_.set_defaults(command=run)
+
+    stats_ = commands.add_parser('stats', parents=[common], help='Show a year of listening')
+    stats_.add_argument('year',
+                        help='[this year]',
+                        type=int,
+                        nargs='?',
+                        default=datetime.date.today().year)
+    stats_.add_argument('--top',
+                        help='How many artists, tracks and albums to list [%(default)s]',
+                        type=int,
+                        default=10)
+    stats_.set_defaults(command=show_stats)
 
     backup_ = commands.add_parser('backup', parents=[common, backups], help='Back up the database')
     backup_.set_defaults(command=take_backup)
@@ -109,8 +134,9 @@ def parse_args(arg_list):
     uninstall = schedule_commands.add_parser('uninstall', parents=[common], help='Stop running on a schedule')
     uninstall.set_defaults(command=lambda args: schedule.uninstall())
     status_ = schedule_commands.add_parser('status', parents=[common],
-                                           help='Show whether, and how often, it runs on a schedule')
-    status_.set_defaults(command=lambda args: schedule.status())
+                                           help='Show whether, and how often, it runs on a schedule, and how the '
+                                                'last run went')
+    status_.set_defaults(command=schedule_status)
 
     args, extra = parser.parse_known_args(arg_list)
     if args.command is psql:
@@ -154,10 +180,20 @@ def run(args):
     # Runs are added one after another to the schedule's log, so mark where each starts
     print(file=sys.stderr)
     logging.info("===== Run started%s =====", " (dry run)" if args.dry_run else "")
-    with server.work(), server.running():
+    with server.work(), server.running(), history.recorded(args.scheduled, args.dry_run) as record:
         backup.take(args.backup_dir)
-        library.import_library(database.DATABASE)
-        playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
+        record.plays_recorded, record.plays_estimated = library.import_library(database.DATABASE)
+        try:
+            record.playlists_changed = playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
+            record.playlists_failed = 0
+        except playlists.ExportFailed as failure:
+            record.playlists_changed, record.playlists_failed = failure.changed, failure.failed
+            raise
+
+
+def show_stats(args):
+    with server.running():
+        print('\n'.join(stats.report(args.year, args.top)))
 
 
 def take_backup(args):
@@ -188,6 +224,13 @@ def psql(args):
             signal.signal(signal.SIGINT, previous)
     if returncode:
         raise SystemExit(returncode)
+
+
+def schedule_status(args):
+    schedule.status()
+    if server.initialised():
+        with server.running():
+            history.log_summary()
 
 
 def status(args):

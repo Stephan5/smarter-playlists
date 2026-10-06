@@ -18,7 +18,7 @@ def log_path():
 
 def agent(every_hours, backup_dir=None):
     """A launchd agent that imports the library and exports playlists every few hours, and when you log in."""
-    arguments = [sys.executable, '-m', 'smarter_playlists', 'run']
+    arguments = [sys.executable, '-m', 'smarter_playlists', 'run', '--scheduled']
     if backup_dir:
         arguments += ['--backup-dir', str(pathlib.Path(backup_dir).resolve())]
     definition = {
@@ -75,6 +75,21 @@ def status():
     logging.info("Scheduled every %g hours%s. Logging to %s", definition['StartInterval'] / 60 / 60,
                  "" if loaded else ", but not loaded. Run `smarter-playlists schedule install` again",
                  definition['StandardOutPath'])
+
+
+def notify_failure(message):
+    """Shows a macOS notification that a scheduled run failed. If that fails too, it's only logged."""
+    script = ['-e', 'on run argv',
+              '-e', 'display notification (item 1 of argv) with title "Smarter Playlists" '
+                    'subtitle "The scheduled run failed"',
+              '-e', 'end run']
+    try:
+        process = subprocess.run(['/usr/bin/osascript', *script, message], capture_output=True, text=True)
+    except OSError as error:
+        logging.warning("Couldn't show a notification: %s", error)
+        return
+    if process.returncode != 0:
+        logging.warning("Couldn't show a notification: %s", process.stderr.strip())
 
 
 def domain():

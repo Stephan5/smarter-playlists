@@ -49,3 +49,22 @@ CREATE TABLE play (
 );
 
 CREATE INDEX idx_play_played_at ON play (played_at);
+
+-- One row for each `smarter-playlists run`, for `schedule status` and to look back on how runs have gone
+CREATE TABLE run (
+    run_id            BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    started_at        TIMESTAMPTZ NOT NULL,
+    -- Not set while it's running, or if it was killed before it could say how it went
+    finished_at       TIMESTAMPTZ,
+    scheduled         BOOLEAN NOT NULL,
+    dry_run           BOOLEAN NOT NULL,
+    -- How far it got: not set if it stopped before importing, or before exporting
+    plays_recorded    INT,
+    plays_estimated   INT,
+    playlists_changed INT,
+    playlists_failed  INT,
+    -- Why it failed, if it did
+    error             TEXT
+);
+
+CREATE INDEX idx_run_started_at ON run (started_at);

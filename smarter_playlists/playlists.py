@@ -2,7 +2,6 @@ import dataclasses
 import importlib.resources
 import json
 import logging
-import re
 import subprocess
 
 from psycopg import sql
@@ -41,7 +40,17 @@ class Playlist:
                 .format(DESCRIPTION_PREFIX, self.view, PROJECT_URL))
 
 
+class ExportFailed(SystemExit):
+    """Some playlists couldn't be exported. Says how many were, for the run history."""
+
+    def __init__(self, changed, failed, total):
+        super().__init__("Failed to export {0} of {1} playlists".format(failed, total))
+        self.changed = changed
+        self.failed = failed
+
+
 def export_playlists(database_name, names=(), dry_run=False):
+    """Exports the playlists to Music, returning how many were (or with dry_run, would be) changed."""
     with database.connect(database_name) as db:
         database.require_set_up(db)
         playlists = fetch_playlists(db)
@@ -51,11 +60,11 @@ def export_playlists(database_name, names=(), dry_run=False):
 
     if not playlists:
         logging.warning("No playlists found in the %s schema", PLAYLISTS_SCHEMA)
-        return
+        return 0
 
     # Music takes a while, a minute or more, to update many playlists
     logging.info("%s %d playlists in Music...", "Checking" if dry_run else "Updating", len(playlists))
-    failed = 0
+    changed = failed = 0
     for playlist, result in zip(playlists.values(), sync_playlists(playlists, dry_run)):
         if 'error' in result:
             logging.error("Couldn't export playlist '%s': %s", playlist.path, result['error'])
@@ -68,6 +77,7 @@ def export_playlists(database_name, names=(), dry_run=False):
         if not result['changed']:
             logging.debug("Playlist '%s' is already up to date", playlist.path)
         else:
+            changed += 1
             if result['created']:
                 action = 'Would create' if dry_run else 'Created'
             elif result['moved']:
@@ -77,7 +87,8 @@ def export_playlists(database_name, names=(), dry_run=False):
             logging.info("%s playlist '%s' with %d tracks", action, playlist.path, result['tracks'])
 
     if failed:
-        raise SystemExit("Failed to export {0} of {1} playlists".format(failed, len(playlists)))
+        raise ExportFailed(changed, failed, len(playlists))
+    return changed
 
 
 def select_playlists(playlists, names):

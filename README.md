@@ -134,6 +134,15 @@ Smart playlists and folders are never replaced. Any changes you make to an expor
 
 The first time it runs, macOS will ask for permission for your terminal to control the Music app.
 
+## Stats
+
+```bash
+./venv/bin/smarter-playlists stats
+./venv/bin/smarter-playlists stats 2025 --top 20
+```
+
+A year of listening, this year unless you name another: how many plays and hours, hours by month, and your top artists (with how much you played them each month), tracks, and albums, both of any year and released that year. Plays estimated between imports count too, so it says what share of plays are estimated. The more of them there are, the rougher the months are.
+
 ## Running on a schedule
 
 To keep the play history accurate and playlists up to date, import and export regularly. `smarter-playlists run` backs up, imports and exports, and this sets it to run every 2 hours, and whenever you log in:
@@ -159,6 +168,10 @@ To stop running on a schedule:
 ```bash
 ./venv/bin/smarter-playlists schedule uninstall
 ```
+
+### Run history
+
+Every `run` is recorded in the `run` table: when it started and finished, whether it was scheduled, the plays it recorded, the playlists it changed, and why it failed if it did. `schedule status` says how the last run went, and when the last successful one was if it failed. If a scheduled run fails, you also get a notification.
 
 ## Database
 
@@ -223,8 +236,3 @@ The tests need Postgres installed (`initdb` or `pg_config` on the `PATH`) but no
 ```
 
 `pytest --integration` also runs a few read-only checks against your real Music library and the Music app. `pytest --write-music` checks exporting to the Music app for real: it makes playlists and folders named `SPIT …` in a "Smarter Playlists Integration Test" folder, and deletes them again. It takes a couple of minutes, as it waits to see that iCloud Music Library leaves them where they were put.
-
-## TODO
-
-* Run history and failure alerts: record each run (when, the plays recorded, the playlists changed, and any errors) in a `run` table, show the last successful run in `schedule status`, and send a macOS notification when a scheduled run fails.
-* `smarter-playlists stats`: a year in review, with listening hours by month, top artists over time, and albums of the year.

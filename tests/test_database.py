@@ -10,7 +10,7 @@ def test_creates_tables(database_name, query):
           FROM information_schema.tables
          WHERE table_schema = 'public'
          ORDER BY 1
-        """) == [('album',), ('artist',), ('play',), ('track',)]
+        """) == [('album',), ('artist',), ('play',), ('run',), ('track',)]
 
 
 def test_creates_only_the_playlist_schema(database_name, query):
@@ -71,6 +71,12 @@ def test_only_optional_values_are_nullable(database_name, query):
          ORDER BY 1, ordinal_position
         """) == [
         ('album', 'year'),
+        ('run', 'finished_at'),
+        ('run', 'plays_recorded'),
+        ('run', 'plays_estimated'),
+        ('run', 'playlists_changed'),
+        ('run', 'playlists_failed'),
+        ('run', 'error'),
         ('track', 'year'),
         ('track', 'bpm'),
         ('track', 'last_played_at'),

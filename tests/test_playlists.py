@@ -141,8 +141,8 @@ class TestExport:
 
         [playlist] = music.requests[0]['playlists']
         assert playlist['description'] == (
-            'Made by Smarter Playlists from the playlist."All-Time Favourites" view. Changes made here will be '
-            'overwritten. https://github.com/Stephan5/smarter-playlists')
+            'Made by Smarter Playlists from the All-Time Favourites view. Changes made here will be overwritten. '
+            'https://github.com/Stephan5/smarter-playlists')
 
     def test_requires_database_setup(self, empty_database, music):
         with pytest.raises(SystemExit, match='Run `smarter-playlists setup` first'):
@@ -308,14 +308,10 @@ class TestBuiltinPlaylists:
         assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000001']}
 
 
-@pytest.mark.parametrize('view, written_as', [
-    ('monthly', 'playlist.monthly'),
-    ('All-Time Favourites', 'playlist."All-Time Favourites"'),
-    ('say "hi"', 'playlist."say ""hi"""'),
-])
-def test_description_names_the_view_as_written_in_sql(view, written_as):
+@pytest.mark.parametrize('view', ['monthly', 'All-Time Favourites', 'say "hi"'])
+def test_description_names_the_view(view):
     assert playlists.Playlist('Name', view, []).description.startswith(
-        'Made by Smarter Playlists from the {0} view.'.format(written_as))
+        'Made by Smarter Playlists from the {0} view.'.format(view))
 
 
 @pytest.mark.parametrize('result, dry_run, level, message', [

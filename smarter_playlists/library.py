@@ -40,6 +40,7 @@ LIBRARY_COLUMNS = [
 
 
 def import_library(database_name):
+    """Imports the Music library, returning how many new plays were recorded, and how many of them were estimated."""
     logging.info("Reading the Music library...")
     tracks = read_library()
     if not tracks:
@@ -51,7 +52,7 @@ def import_library(database_name):
         database.require_set_up(db)
         load_library(db, tracks)
         update_tracks(db)
-        record_plays(db)
+        return record_plays(db)
 
 
 def read_library():
@@ -222,29 +223,30 @@ def record_plays(db):
          ORDER BY MAX(r.played_at), t.title
         """, {'history_start': HISTORY_START}).fetchall()
 
-    log_plays(rows)
+    estimated = sum(row[3] for row in rows)
+    plays = sum(1 for _, _, played_at, _ in rows if played_at) + estimated
+    log_plays(rows, plays, estimated)
+    return plays, estimated
 
 
-def log_plays(rows):
+def log_plays(rows, plays, estimated):
     """Logs each track's new plays, unless there are too many to read, as on the first import."""
     level = logging.INFO if len(rows) <= MAX_TRACKS_LOGGED else logging.DEBUG
     today = datetime.date.today()
-    for title, artist, played_at, estimated in rows:
+    for title, artist, played_at, track_estimated in rows:
         if played_at:
             played_at = played_at.astimezone()
             when = played_at.strftime('%H:%M' if played_at.date() == today else '%Y-%m-%d %H:%M')
             logging.log(level, "Played '%s' by %s at %s%s", title, artist, when,
-                        " (+{0} estimated)".format(estimated) if estimated else "")
+                        " (+{0} estimated)".format(track_estimated) if track_estimated else "")
         else:
-            logging.log(level, "Played '%s' by %s %d %s (estimated)", title, artist, estimated,
-                        "time" if estimated == 1 else "times")
+            logging.log(level, "Played '%s' by %s %d %s (estimated)", title, artist, track_estimated,
+                        "time" if track_estimated == 1 else "times")
 
     if not rows:
         logging.info("No new plays")
         return
-    observed = sum(1 for _, _, played_at, _ in rows if played_at)
-    estimated = sum(row[3] for row in rows)
-    logging.info("Recorded %s (%d estimated) of %s%s", plural(observed + estimated, 'new play'), estimated,
+    logging.info("Recorded %s (%d estimated) of %s%s", plural(plays, 'new play'), estimated,
                  plural(len(rows), 'track'), "" if level == logging.INFO else ". Use --verbose to list them")
 
 

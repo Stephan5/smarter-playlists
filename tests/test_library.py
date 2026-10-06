@@ -191,6 +191,13 @@ class TestPlayLog:
             "Recorded 4 new plays (2 estimated) of 2 tracks",
         ]
 
+    def test_counts_every_track_s_estimated_plays(self, run_import, messages):
+        # The track played last has none estimated
+        run_import(make_track(play_count=3, last_played_at=LAST_PLAYED - datetime.timedelta(hours=1)),
+                   make_track(track_id='A000000000000002', title='Reckoner', play_count=1, last_played_at=LAST_PLAYED))
+
+        assert messages()[-1] == "Recorded 4 new plays (2 estimated) of 2 tracks"
+
     def test_leaves_out_the_date_for_plays_today(self, run_import, messages):
         now = datetime.datetime.now(UTC).replace(microsecond=0)
         run_import(make_track(play_count=1, last_played_at=now))
