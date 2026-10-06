@@ -17,7 +17,8 @@ def test_creates_builtin_playlists(database_name, query, run_import):
     run_import(make_track())
 
     views = query("SELECT table_name FROM information_schema.views WHERE table_schema = 'playlists' ORDER BY 1")
-    assert views == [('All-Time Favourites',), ('Forgotten Favourites',), ('monthly',), ('yearly',)]
+    assert views == [('All-Time Favourites',), ('Forgotten Favourites',), ('Last Month',), ('Rising',), ('monthly',),
+                     ('top_artists',), ('yearly',)]
     for (view,) in views:
         query('SELECT track_id, position FROM playlists."{0}"'.format(view))
 

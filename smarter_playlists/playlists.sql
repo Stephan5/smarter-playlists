@@ -65,9 +65,88 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY year, track_id, album_id, artist_id) AS track_plays
-         WHERE album_rank <= 3
-           AND artist_rank <= 5) AS ranked
+         WHERE album_rank <= 5
+           AND artist_rank <= 10) AS ranked
  WHERE position <= 100;
+
+-- The most played tracks of the last 30 days, with at most 2 tracks from any album and 5 from any artist
+CREATE VIEW playlists."Last Month" AS
+SELECT 'Smarter Playlists' AS folder,
+       track_id,
+       ROW_NUMBER() OVER (ORDER BY plays DESC, last_played_at DESC, track_id) AS position
+  FROM (SELECT track_id,
+               COUNT(*) AS plays,
+               MAX(played_at) AS last_played_at,
+               ROW_NUMBER() OVER (PARTITION BY album_id
+                                      ORDER BY COUNT(*) DESC, MAX(played_at) DESC, track_id) AS album_rank,
+               ROW_NUMBER() OVER (PARTITION BY artist_id
+                                      ORDER BY COUNT(*) DESC, MAX(played_at) DESC, track_id) AS artist_rank
+          FROM play
+          JOIN track USING (track_id)
+         WHERE played_at >= now() - INTERVAL '30 days'
+           AND removed_at IS NULL
+           AND NOT playlist_only
+         GROUP BY track_id, album_id, artist_id) AS track_plays
+ WHERE album_rank <= 2
+   AND artist_rank <= 5
+ ORDER BY position
+ LIMIT 50;
+
+-- What you're getting into: tracks played more in the last 30 days than in the 90 days before, at least twice, ordered
+-- by how much more. At most 2 tracks from any album and 3 from any artist.
+CREATE VIEW playlists."Rising" AS
+SELECT 'Smarter Playlists' AS folder,
+       track_id,
+       ROW_NUMBER() OVER (ORDER BY recent_plays - earlier_plays DESC, recent_plays DESC, track_id) AS position
+  FROM (SELECT track_id,
+               recent_plays,
+               earlier_plays,
+               ROW_NUMBER() OVER (PARTITION BY album_id
+                                      ORDER BY recent_plays - earlier_plays DESC, recent_plays DESC, track_id)
+                   AS album_rank,
+               ROW_NUMBER() OVER (PARTITION BY artist_id
+                                      ORDER BY recent_plays - earlier_plays DESC, recent_plays DESC, track_id)
+                   AS artist_rank
+          FROM (SELECT track_id,
+                       album_id,
+                       artist_id,
+                       COUNT(*) FILTER (WHERE played_at >= now() - INTERVAL '30 days') AS recent_plays,
+                       COUNT(*) FILTER (WHERE played_at < now() - INTERVAL '30 days') AS earlier_plays
+                  FROM play
+                  JOIN track USING (track_id)
+                 WHERE played_at >= now() - INTERVAL '120 days'
+                   AND removed_at IS NULL
+                   AND NOT playlist_only
+                 GROUP BY track_id, album_id, artist_id) AS track_plays
+         WHERE recent_plays > earlier_plays
+           AND recent_plays >= 2) AS rising
+ WHERE album_rank <= 2
+   AND artist_rank <= 3
+ ORDER BY position
+ LIMIT 50;
+
+-- A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks
+CREATE VIEW playlists.top_artists AS
+SELECT 'Smarter Playlists/Top Artists' AS folder,
+       artist.name AS playlist,
+       track_id,
+       position
+  FROM (SELECT artist_id,
+               track_id,
+               ROW_NUMBER() OVER (PARTITION BY artist_id ORDER BY play_count DESC, track_id) AS position
+          FROM track
+         WHERE play_count > 0
+           AND removed_at IS NULL
+           AND NOT playlist_only) AS artist_tracks
+  JOIN (SELECT artist_id
+          FROM track
+         WHERE removed_at IS NULL
+           AND NOT playlist_only
+         GROUP BY artist_id
+         ORDER BY SUM(play_count) DESC, artist_id
+         LIMIT 10) AS top_artists USING (artist_id)
+  JOIN artist USING (artist_id)
+ WHERE position <= 25;
 
 -- The most played tracks of all time, with at most 3 tracks per artist
 CREATE VIEW playlists."All-Time Favourites" AS

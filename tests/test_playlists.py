@@ -15,8 +15,7 @@ def tracks(run_import):
 
 @pytest.fixture
 def no_builtin_playlists(query):
-    query("""DROP VIEW playlists.monthly, playlists.yearly, playlists."All-Time Favourites",
-                       playlists."Forgotten Favourites" """)
+    query("DROP SCHEMA playlists CASCADE; CREATE SCHEMA playlists")
 
 
 @pytest.fixture
@@ -247,6 +246,44 @@ class TestBuiltinPlaylists:
         query("UPDATE track SET album_id = 'C000000000000001'")
 
         assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000004', 'A000000000000003']}
+
+    def test_last_month_is_the_last_30_days(self, database_name, plays):
+        now = datetime.datetime.now(UTC)
+        days_ago = lambda days: now - datetime.timedelta(days=days)
+        plays({1: [days_ago(1)],
+               2: [days_ago(5), days_ago(29)],
+               3: [days_ago(31), days_ago(40), days_ago(45)]})
+
+        assert self.fetch(database_name, 'Last Month') == {
+            'Smarter Playlists/Last Month': ['A000000000000002', 'A000000000000001']}
+
+    def test_rising_is_tracks_played_more_recently(self, database_name, plays):
+        now = datetime.datetime.now(UTC)
+        days_ago = lambda *days: [now - datetime.timedelta(days=day) for day in days]
+        plays({1: days_ago(1, 2, 3),                    # 3 recent, none before: up 3
+               2: days_ago(1, 2) + days_ago(40, 50, 60), # 2 recent, 3 before: down
+               3: days_ago(1),                           # only played once recently
+               4: days_ago(1, 2, 3, 4) + days_ago(100),  # 4 recent, 1 before: up 3, and more recent plays
+               5: days_ago(1, 2) + days_ago(130, 140)})  # older plays are outside the 90 days before
+
+        assert self.fetch(database_name, 'Rising') == {
+            'Smarter Playlists/Rising': ['A000000000000004', 'A000000000000001', 'A000000000000005']}
+
+    def test_top_artists_are_playlists_of_their_top_tracks(self, database_name, run_import):
+        big = [make_track(track_id='A1{0:014X}'.format(n), artist_id='B000000000000BIG', artist_name='Big',
+                          album_id='C000000000000BIG', play_count=100 + n) for n in range(30)]
+        small = [make_track(track_id='A2{0:014X}'.format(n), artist_id='B{0:015X}'.format(n),
+                            artist_name='Small {0}'.format(n), album_id='C{0:015X}'.format(n), play_count=n)
+                 for n in range(1, 22)]
+        run_import(*big, *small)
+
+        top_artists = self.fetch(database_name, 'top_artists')
+
+        # Big, and the 9 most played of the 21 smaller artists
+        assert len(top_artists) == 10
+        assert 'Smarter Playlists/Top Artists/Small 12' not in top_artists
+        assert top_artists['Smarter Playlists/Top Artists/Small 13'] == ['A2{0:014X}'.format(13)]
+        assert top_artists['Smarter Playlists/Top Artists/Big'] == ['A1{0:014X}'.format(n) for n in range(29, 4, -1)]
 
     def test_monthly_playlists_skip_removed_and_playlist_only_tracks(self, database_name, plays, query):
         plays({1: [at(2026, 10, 1)], 2: [at(2026, 10, 1)], 3: [at(2026, 10, 1)]},
