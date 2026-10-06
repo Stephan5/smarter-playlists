@@ -8,7 +8,7 @@ version = "2.0.0"
 description = "Build a play history from your Apple Music library in Postgres, and make playlists from it with SQL"
 readme = "README.md"
 license = "Unlicense"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "psycopg[binary]>=3.2",
     "pyobjc-framework-iTunesLibrary>=10.0; sys_platform == 'darwin'",

@@ -10,7 +10,7 @@ It imports your Music library into PostgreSQL, keeps a history of every play, an
 
 ### Prerequisites
 * macOS with the Music app
-* Python 3.10+
+* Python 3.14+
 * Postgres
 * Basic SQL knowledge to create a playlist of your liking.
 
