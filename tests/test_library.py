@@ -269,6 +269,11 @@ class TestReadLibrary:
             '', '', None, 1, None)
         assert (track['album_title'], track['album_artist'], track['disc_number']) == ('', None, 1)
 
+    def test_never_played_tracks_have_no_last_played_time(self, fake_library):
+        fake_library(fake_item(playCount=0, lastPlayedDate=fake_date(datetime.datetime(1904, 1, 1, tzinfo=UTC))))
+
+        assert read_library_as_dicts()[0]['last_played_at'] is None
+
     @pytest.mark.parametrize('persistent_id, expected', [
         (0x1, '0000000000000001'),
         (0xC358A93CBB48422E, 'C358A93CBB48422E'),

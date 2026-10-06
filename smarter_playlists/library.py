@@ -98,10 +98,15 @@ def format_persistent_id(persistent_id):
     return '{0:016X}'.format(persistent_id & 0xFFFFFFFFFFFFFFFF)
 
 
+# The library's dates count from here, and it reports some tracks that have never been played as last played then
+MAC_EPOCH = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc)
+
+
 def to_datetime(ns_date):
     if ns_date is None:
         return None
-    return datetime.datetime.fromtimestamp(ns_date.timeIntervalSince1970(), tz=datetime.timezone.utc)
+    timestamp = datetime.datetime.fromtimestamp(ns_date.timeIntervalSince1970(), tz=datetime.timezone.utc)
+    return timestamp if timestamp > MAC_EPOCH else None
 
 
 def load_library(db, tracks):

@@ -51,6 +51,18 @@ Music only tells us how many times a track has been played and when it was last 
 The first import has nothing to go on, so it spreads each track's past plays evenly from the start of 2010 up to its last play. After that, the more often the import runs, the smaller the gaps and the more accurate the history.
 Add `WHERE NOT estimated` to a query to count only the plays that were actually observed.
 
+### History from the original version
+
+The original iTunes version of Smarter Playlists kept its own play history from 2018 to 2021. To start from that instead of estimating everything since 2010, restore its database (e.g. as `music_2021`) and use `scripts/import_history.py` in place of the first import:
+
+```bash
+createdb music
+./venv/bin/smarter-playlists setup
+./venv/bin/python scripts/import_history.py --history music_2021
+```
+
+Its tracks are matched to your library by title, artist and album, and the plays it recorded twice when the clocks changed are dropped. See the script for the details.
+
 ## Playlists
 
 Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
