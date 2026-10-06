@@ -9,4 +9,3 @@ __pycache__/
 *.spec
 build/
 dist/
-*.spec
