@@ -1,0 +1,200 @@
+import datetime
+import logging
+
+import iTunesLibrary
+
+from . import database
+
+# Plays from before the first import are spread evenly from here up to the track's last play
+HISTORY_START = datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
+
+LIBRARY_COLUMNS = [
+    ('track_id', 'TEXT'),
+    ('title', 'TEXT'),
+    ('artist_id', 'TEXT'),
+    ('artist_name', 'TEXT'),
+    ('album_id', 'TEXT'),
+    ('album_title', 'TEXT'),
+    ('album_artist', 'TEXT'),
+    ('compilation', 'BOOLEAN'),
+    ('genre', 'TEXT'),
+    ('year', 'INT'),
+    ('disc_number', 'INT'),
+    ('track_number', 'INT'),
+    ('duration_ms', 'INT'),
+    ('bpm', 'INT'),
+    ('play_count', 'INT'),
+    ('skip_count', 'INT'),
+    ('last_played_at', 'TIMESTAMPTZ'),
+    ('last_skipped_at', 'TIMESTAMPTZ'),
+    ('added_at', 'TIMESTAMPTZ'),
+    ('playlist_only', 'BOOLEAN'),
+]
+
+
+def import_library(database_name):
+    logging.info("Reading the Music library...")
+    tracks = read_library()
+    if not tracks:
+        # Rather than marking every track as removed
+        raise SystemExit("No songs found in the Music library")
+    logging.info("Found %d songs", len(tracks))
+
+    with database.connect(database_name) as db:
+        database.require_set_up(db)
+        load_library(db, tracks)
+        update_tracks(db)
+        record_plays(db)
+
+
+def read_library():
+    library, error = iTunesLibrary.ITLibrary.libraryWithAPIVersion_error_('1.0', None)
+    if library is None:
+        raise SystemExit("Unable to read the Music library: {0}".format(error))
+
+    tracks = []
+    for item in library.allMediaItems():
+        # Skips podcasts, audiobooks, music videos etc.
+        if item.mediaKind() != iTunesLibrary.ITLibMediaItemMediaKindSong:
+            continue
+
+        album = item.album()
+        track = {
+            'track_id': format_persistent_id(item.persistentID()),
+            'title': item.title() or '',
+            'artist_id': format_persistent_id(item.artist().persistentID()),
+            'artist_name': item.artist().name() or '',
+            'album_id': format_persistent_id(album.persistentID()),
+            'album_title': album.title() or '',
+            'album_artist': album.albumArtist(),
+            'compilation': bool(album.isCompilation()),
+            'genre': item.genre() or '',
+            'year': item.year() or None,
+            'disc_number': album.discNumber() or 1,
+            'track_number': item.trackNumber() or 1,
+            'duration_ms': item.totalTime(),
+            'bpm': item.beatsPerMinute() or None,
+            'play_count': item.playCount(),
+            'skip_count': item.skipCount(),
+            'last_played_at': to_datetime(item.lastPlayedDate()),
+            'last_skipped_at': to_datetime(item.skipDate()),
+            'added_at': to_datetime(item.addedDate()),
+            'playlist_only': bool(item.isPlaylistOnly()),
+        }
+        tracks.append(tuple(track[column] for column, _ in LIBRARY_COLUMNS))
+
+    return tracks
+
+
+def format_persistent_id(persistent_id):
+    # The same 16 hex digit form the Music app uses for a track's persistent ID
+    return '{0:016X}'.format(persistent_id & 0xFFFFFFFFFFFFFFFF)
+
+
+def to_datetime(ns_date):
+    if ns_date is None:
+        return None
+    return datetime.datetime.fromtimestamp(ns_date.timeIntervalSince1970(), tz=datetime.timezone.utc)
+
+
+def load_library(db, tracks):
+    db.execute("CREATE TEMPORARY TABLE library ({0}) ON COMMIT DROP".format(
+        ', '.join('{0} {1}'.format(column, column_type) for column, column_type in LIBRARY_COLUMNS)))
+
+    with db.cursor().copy("COPY library FROM STDIN") as copy:
+        for track in tracks:
+            copy.write_row(track)
+
+
+def update_tracks(db):
+    # Artists and albums can be spelt differently across their tracks, so take the most common spelling
+    db.execute("""
+        INSERT INTO artist (artist_id, name)
+        SELECT artist_id,
+               MODE() WITHIN GROUP (ORDER BY artist_name)
+          FROM library
+         GROUP BY artist_id
+            ON CONFLICT (artist_id) DO UPDATE
+           SET name = excluded.name
+        """)
+
+    db.execute("""
+        INSERT INTO album (album_id, title, album_artist, compilation, year)
+        SELECT album_id,
+               MODE() WITHIN GROUP (ORDER BY album_title),
+               COALESCE(MODE() WITHIN GROUP (ORDER BY album_artist), MODE() WITHIN GROUP (ORDER BY artist_name)),
+               BOOL_OR(compilation),
+               MAX(year)
+          FROM library
+         GROUP BY album_id
+            ON CONFLICT (album_id) DO UPDATE
+           SET title = excluded.title,
+               album_artist = excluded.album_artist,
+               compilation = excluded.compilation,
+               year = excluded.year
+        """)
+
+    columns = [column for column, _ in LIBRARY_COLUMNS
+               if column not in ('artist_name', 'album_title', 'album_artist', 'compilation')]
+    db.execute("""
+        INSERT INTO track ({0}, removed_at)
+        SELECT {0}, NULL
+          FROM library
+            ON CONFLICT (track_id) DO UPDATE
+           SET {1}
+        """.format(', '.join(columns),
+                   ', '.join('{0} = excluded.{0}'.format(column) for column in columns + ['removed_at'])))
+
+    cur = db.execute("""
+        UPDATE track
+           SET removed_at = now()
+         WHERE removed_at IS NULL
+           AND NOT EXISTS (SELECT FROM library WHERE library.track_id = track.track_id)
+        """)
+    if cur.rowcount:
+        logging.warning("%d tracks are no longer in the library", cur.rowcount)
+
+
+def record_plays(db):
+    # Tops up each track's plays to its play count. The newest play is recorded at the track's last played time and
+    # any others since its previous recorded play (or HISTORY_START) are estimated, evenly spaced before it.
+    #
+    # Only adding plays when the count goes up also stops the same play being recorded twice when the library reports
+    # a slightly different last played time, as it does after the clocks change.
+    cur = db.execute("""
+        WITH missing AS (
+            SELECT t.track_id,
+                   t.last_played_at,
+                   COALESCE(MAX(p.played_at) FILTER (WHERE p.played_at < t.last_played_at),
+                            %(history_start)s) AS window_start,
+                   COALESCE(BOOL_OR(p.played_at = t.last_played_at), FALSE) AS has_last_play,
+                   t.play_count - COUNT(p.play_id) AS missing_plays
+              FROM track t
+              LEFT JOIN play p USING (track_id)
+             WHERE t.last_played_at IS NOT NULL
+             GROUP BY t.track_id
+            HAVING t.play_count > COUNT(p.play_id)
+        )
+        INSERT INTO play (track_id, played_at, estimated)
+        SELECT track_id,
+               last_played_at,
+               FALSE
+          FROM missing
+         WHERE NOT has_last_play
+         UNION ALL
+        SELECT track_id,
+               -- In seconds rather than days, which would shift by an hour across a clock change
+               window_start + EXTRACT(EPOCH FROM last_played_at - window_start) * n / (estimates + 1)
+                              * INTERVAL '1 second',
+               TRUE
+          FROM (SELECT *,
+                       missing_plays - CASE WHEN has_last_play THEN 0 ELSE 1 END AS estimates
+                  FROM missing) AS m,
+               generate_series(1, m.estimates) AS n
+            ON CONFLICT (track_id, played_at) DO NOTHING
+        RETURNING estimated
+        """, {'history_start': HISTORY_START})
+
+    estimated = [row[0] for row in cur.fetchall()]
+    logging.info("Recorded %d new plays (%d estimated)", len(estimated), sum(estimated))
+

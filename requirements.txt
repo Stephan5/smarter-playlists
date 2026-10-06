@@ -1,2 +1,0 @@
-psycopg2==2.7.7
-virtualenv==16.3.0
