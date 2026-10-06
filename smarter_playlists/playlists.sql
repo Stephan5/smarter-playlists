@@ -40,7 +40,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
            AND artist_rank <= 5) AS ranked
  WHERE position <= 50;
 
--- The most played tracks of each year since 2026, named like "2026", with at most 3 tracks from any album and 5 from
+-- The most played tracks of each year since 2026, named like "2026", with at most 5 tracks from any album and 10 from
 -- any artist. A new playlist appears each year, in a folder for its year alongside its monthly playlists.
 CREATE VIEW playlists.yearly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
@@ -148,7 +148,7 @@ SELECT 'Smarter Playlists/Top Artists' AS folder,
   JOIN artist USING (artist_id)
  WHERE position <= 25;
 
--- The most played tracks of all time, with at most 3 tracks per artist
+-- The most played tracks of all time, with at most 5 tracks per artist
 CREATE VIEW playlists."All-Time Favourites" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
@@ -159,7 +159,7 @@ SELECT 'Smarter Playlists' AS folder,
           FROM track
          WHERE removed_at IS NULL
            AND NOT playlist_only) AS ranked
- WHERE artist_rank <= 3
+ WHERE artist_rank <= 5
  ORDER BY position
  LIMIT 100;
 

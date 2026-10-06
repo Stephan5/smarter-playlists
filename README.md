@@ -56,21 +56,31 @@ Add `WHERE NOT estimated` to a query to count only the plays that were actually 
 
 Every view in the `playlists` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
 
-| View | Playlists |
-| --- | --- |
-| `monthly` | The 50 most played tracks of each month since October 2026, named like "October 2026". A new one appears each month, in a folder for its year. |
-| `yearly` | The 100 most played tracks of each year since 2026, named like "2026". A new one appears each year, in the folder for that year. |
-| `"All-Time Favourites"` | The 100 most played tracks of all time, at most 3 per artist. |
-| `"Forgotten Favourites"` | Tracks played at least 10 times, but not for a year. |
+| View                     | Playlists                                                                                                                                                                                 |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `monthly`                | The 50 most played tracks of each month since October 2026, named like "October 2026", at most 2 per album and 5 per artist. A new one appears each month, in a folder for its year.      |
+| `yearly`                 | The 100 most played tracks of each year since 2026, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                   |
+| `"Last Month"`           | The 50 most played tracks of the last 30 days, at most 2 per album and 5 per artist.                                                                                                      |
+| `"Rising"`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 2 per album and 3 per artist. |
+| `top_artists`            | A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks, in a "Top Artists" folder.                                                        |
+| `"All-Time Favourites"`  | The 100 most played tracks of all time, at most 5 per artist.                                                                                                                             |
+| `"Forgotten Favourites"` | Up to 100 tracks played at least 10 times, but not for a year.                                                                                                                            |
 
 ```
 Smarter Playlists
 ├── All-Time Favourites
 ├── Forgotten Favourites
+├── Last Month
+├── Rising
+├── Top Artists
+│   ├── Radiohead
+│   └── ...
 └── 2026
     ├── 2026
     └── October 2026
 ```
+
+"Last Month" and "Rising" include plays estimated between imports. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
 
 A view needs a `track_id` column, and the playlist follows its `position` column if it has one. It's exported as a playlist named after the view or, if it has a `playlist` column, as one playlist for each value of that column. That's how `monthly` makes a playlist for every month.
 
@@ -90,6 +100,12 @@ SELECT track_id,
 ```
 
 Edit or drop the built-in views to change them. Dropping a view doesn't delete its playlists from Music.
+
+To reset the built-in views, for example after updating Smarter Playlists, re-run `playlists.sql`. This drops and recreates the whole `playlists` schema, so any views you've added to it are lost:
+
+```bash
+psql music -f smarter_playlists/playlists.sql
+```
 
 ### Export
 
