@@ -226,13 +226,23 @@ The database only works with the major version of Postgres that made it, e.g. 18
 ./venv/bin/smarter-playlists upgrade
 ```
 
+## Development
+
+Common development tasks are available through a Makefile:
+
+```bash
+make test      # Run tests
+make binary    # Build standalone executable (macOS only)
+make clean     # Remove venv, build artifacts, and cache
+```
+
 ## Tests
 
 The tests need Postgres installed (`initdb` or `pg_config` on the `PATH`) but not running: they start their own temporary server in `/tmp`, so they never touch your database or Music library. They fake the Music library and app, so they run on Linux too.
 
 ```bash
 ./venv/bin/pip install -e '.[test]'
-./venv/bin/pytest
+make test
 ```
 
 `pytest --integration` also runs a few read-only checks against your real Music library and the Music app. `pytest --write-music` checks exporting to the Music app for real: it makes playlists and folders named `SPIT …` in a "Smarter Playlists Integration Test" folder, and deletes them again. It takes a couple of minutes, as it waits to see that iCloud Music Library leaves them where they were put.
