@@ -277,11 +277,11 @@ make clean             # Remove venv, build artifacts, and cache
 
 ### Releasing
 
-Pushing a tag that matches the version in `pyproject.toml` builds the executable on macOS and attaches it to a GitHub release (see [`release.yml`](.github/workflows/release.yml)):
+To release, set `version` in `pyproject.toml` and add a section at the top of [`RELEASE_NOTES.md`](RELEASE_NOTES.md), headed `## <version>`, and commit them. Older versions' sections stay below as the history. Then push a tag that matches the version. That builds the executable on macOS, tests it, and attaches it to a GitHub release, with that version's section as its description (see [`release.yml`](.github/workflows/release.yml)). The workflow refuses to release if the tag doesn't match the version, or the notes have no section for it:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v4.5.0
+git push origin v4.5.0
 ```
 
 The executable is for Apple Silicon (arm64) Macs only, and is slow to start. See [Setup](#setup) for how it compares with a clone.

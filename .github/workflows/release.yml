@@ -28,15 +28,24 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Check the tag matches the version
+      - name: Check the tag matches the version, and find its release notes
         run: |
           version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "Tag $GITHUB_REF_NAME doesn't match version $version in pyproject.toml" >&2
             exit 1
           fi
+          # The release's description is its section of the notes, from its heading to the next version's
+          awk -v heading="## $version" \
+            '$0 == heading {found = 1; next} found && /^## / {exit} found' \
+            RELEASE_NOTES.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "RELEASE_NOTES.md has no notes under '## $version'" >&2
+            exit 1
+          fi
+          echo "NOTES=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_ENV"
 
-      - name: Check this is Apple silicon
+      - name: Check this is Apple Silicon
         run: |
           if [ "$(uname -m)" != arm64 ]; then
             echo "Expected an arm64 runner, got $(uname -m). The release is named and documented as arm64 only" >&2
@@ -66,6 +75,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" --title "$GITHUB_REF_NAME" --generate-notes \
-            --notes "macOS, Apple silicon (arm64) only. Intel Macs can install from source, see the README."
+        run: gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" --title "$GITHUB_REF_NAME" --notes-file "$NOTES"
