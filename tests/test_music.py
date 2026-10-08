@@ -1,4 +1,4 @@
-"""Read-only checks against the real Music library and app. Run with: pytest --integration"""
+"""Read-only checks against the real Music library and app. Run with: pytest --music, or make music-test"""
 
 import re
 
@@ -6,7 +6,7 @@ import pytest
 
 from smarter_playlists import library, playlists
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.music
 
 
 @pytest.fixture(scope='module')

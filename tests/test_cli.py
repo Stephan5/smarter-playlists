@@ -79,8 +79,9 @@ def calls(monkeypatch):
     (['db', 'start'], [('db start', None)]),
     (['db', 'start', '--port', '5499'], [('db start', 5499)]),
     (['db', 'stop'], [('db stop',)]),
-    (['schedule', 'install'], [('install', 2, None)]),
-    (['schedule', 'install', '--every', '6', '--backup-dir', '/backups'], [('install', 6, '/backups')]),
+    (['schedule', 'install'], [('install', 2, None, False)]),
+    (['schedule', 'install', '--dry-run'], [('install', 2, None, True)]),
+    (['schedule', 'install', '--every', '6', '--backup-dir', '/backups'], [('install', 6, '/backups', False)]),
     (['schedule', 'uninstall'], [('uninstall',)]),
     (['schedule', 'status'], [('status',), 'running', ('summary',), '/running']),
 ])

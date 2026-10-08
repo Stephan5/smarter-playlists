@@ -42,7 +42,11 @@ def agent(every_hours, backup_dir=None):
     return definition
 
 
-def install(every_hours, backup_dir=None):
+def install(every_hours, backup_dir=None, dry_run=False):
+    if dry_run:
+        print(plistlib.dumps(agent(every_hours, backup_dir)).decode(), end='')
+        return
+
     path = agent_path()
     if path.exists():
         launchctl('bootout', service())

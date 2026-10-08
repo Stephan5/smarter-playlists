@@ -16,7 +16,7 @@ jobs:
   release:
     needs: test
     # The executable reads the Music library and talks to the Music app, so it can only be built on macOS. Only for
-    # Apple silicon (arm64), which is what macos-latest is. The Intel runners would need a build of their own.
+    # Apple Silicon (arm64), which is what macos-latest is. The Intel runners would need a build of their own.
     runs-on: macos-latest
 
     steps:
@@ -43,14 +43,16 @@ jobs:
             exit 1
           fi
 
-      - name: Install
-        run: pip install -e . pyinstaller
+      # The tests of the executable start their own Postgres server, so only need it installed
+      - name: Install Postgres
+        run: brew install postgresql@18
 
-      - name: Build
-        run: pyinstaller --noconfirm smarter-playlists.spec
-
-      - name: Check it runs
-        run: dist/smarter-playlists --help
+      # Makes the virtual environment, builds the executable, then runs it as a user would, so a build that's missing
+      # something, or a schedule it can't run, is caught before it's released. Slow, as every command takes seconds to
+      # start
+      - name: Build and test the executable
+        run: make binary-test
+        timeout-minutes: 20
 
       - name: Package
         run: |

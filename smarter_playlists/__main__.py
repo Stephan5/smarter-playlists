@@ -135,7 +135,11 @@ def parse_args(arg_list):
                          help='Hours between runs [%(default)s]',
                          type=float,
                          default=2)
-    install.set_defaults(command=lambda args: schedule.install(args.every, args.backup_dir))
+    install.add_argument('--dry-run',
+                         help='Show the launchd agent that would be installed, without installing it',
+                         dest='dry_run',
+                         action='store_true')
+    install.set_defaults(command=lambda args: schedule.install(args.every, args.backup_dir, args.dry_run))
     uninstall = schedule_commands.add_parser('uninstall', parents=[common], help='Stop running on a schedule')
     uninstall.set_defaults(command=lambda args: schedule.uninstall())
     status_ = schedule_commands.add_parser('status', parents=[common],

@@ -57,6 +57,17 @@ def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
     assert launchctl.calls == [['bootstrap', schedule.domain(), str(schedule.agent_path())]]
 
 
+def test_dry_run_shows_the_agent_without_installing_it(home, launchctl, capsys):
+    schedule.install(3, backup_dir='/backups', dry_run=True)
+
+    shown = plistlib.loads(capsys.readouterr().out.encode())
+    assert shown['Label'] == 'local.smarter-playlists'
+    assert shown['StartInterval'] == 3 * 60 * 60
+    assert shown['ProgramArguments'][-3:] == ['--scheduled', '--backup-dir', '/backups']
+    assert not schedule.agent_path().exists()
+    assert launchctl.calls == []
+
+
 def test_the_standalone_executable_is_run_directly(home, launchctl, monkeypatch):
     monkeypatch.setattr(sys, 'frozen', True, raising=False)
     monkeypatch.setattr(sys, 'executable', '/usr/local/bin/smarter-playlists')

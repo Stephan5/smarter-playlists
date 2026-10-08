@@ -8,25 +8,48 @@ It imports your Music library into PostgreSQL, keeps a history of every play, an
 
 ## Setup
 
-### Prerequisites
-* macOS with the Music app
-* Python 3.14+
-* PostgreSQL, e.g. `brew install postgresql@18`. It only needs to be installed, not running: Smarter Playlists runs its own server (see [Database](#database))
+There are two ways to install it. Either way you need macOS with the Music app, and PostgreSQL, e.g. `brew install postgresql@18`. Postgres only needs to be installed, not running: Smarter Playlists runs its own server (see [Database](#database)).
+
+|                                                       | Binary                                           | Clone                                     |
+|-------------------------------------------------------|--------------------------------------------------|-------------------------------------------|
+| Needs                                                 | Apple silicon Mac. No Python                     | Python 3.14+. Any Mac                     |
+| Start up                                              | About 6 seconds for every command                | About 0.3 seconds                         |
+| Scheduling                                            | Yes                                              | Yes                                       |
+| Import from the old version, reset built-in playlists | Needs a clone's `scripts` and `playlists.sql`    | Yes                                       |
+| Updating                                              | Download the new release                         | `git pull`, then `pip install -e .` again |
+
+Both can [run on a schedule](#running-on-a-schedule). The clone is the better choice if you can use it, as it starts much faster. The binary is for if you'd rather not install Python.
+
+### Clone
 
 Install into a virtual environment, then set up the database:
 
 ```bash
+git clone https://github.com/Stephan5/smarter-playlists.git
+cd smarter-playlists
 python3 -m venv venv
 ./venv/bin/pip install -e .
 ./venv/bin/smarter-playlists setup
 ```
+
+### Binary
+
+Download `smarter-playlists-<version>-macos-arm64.zip` from the [latest release](https://github.com/Stephan5/smarter-playlists/releases/latest), unzip it, and set up the database:
+
+```bash
+unzip smarter-playlists-*-macos-arm64.zip
+cd smarter-playlists-*-macos-arm64
+./smarter-playlists setup
+```
+
+It's a single file, so move it anywhere on your `PATH` to run it as `smarter-playlists`. If macOS won't open it because it isn't notarized, clear the quarantine mark it got when downloaded: `xattr -d com.apple.quarantine smarter-playlists`. It's for Apple silicon only, and every command takes about 6 seconds to start, as it unpacks itself into a temporary folder each time and macOS scans everything it unpacks.
 
 `setup` creates a database of its own, with the tables and the built-in playlists, and only needs running once.
 
 ## Import
 
 ```bash
-./venv/bin/smarter-playlists import
+smarter-playlists import
 ```
 
 The library is read with Apple's [iTunesLibrary framework](https://developer.apple.com/documentation/ituneslibrary), so there's no need to export a library file and the Music app doesn't need to be running.
@@ -49,17 +72,6 @@ Music only tells us how many times a track has been played and when it was last 
 
 The first import has nothing to go on, so it spreads each track's past plays evenly from the start of 2010 up to its last play. After that, the more often the import runs, the smaller the gaps and the more accurate the history.
 Add `WHERE NOT estimated` to a query to count only the plays that were actually observed.
-
-### History from the original version
-
-The original iTunes version of Smarter Playlists kept its own play history from 2018 to 2021. To start from that instead of estimating everything since 2010, restore its database to another Postgres server (e.g. as `music_2021` in Postgres.app) and use `scripts/import_history.py` in place of the first import. `--history` is how to connect to it, as a [connection string](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING):
-
-```bash
-./venv/bin/smarter-playlists setup
-./venv/bin/python scripts/import_history.py --history "dbname=music_2021"
-```
-
-Its tracks are matched to your library by title, artist and album, and the plays it recorded twice when the clocks changed are dropped. See the script for the details.
 
 ## Playlists
 
@@ -123,13 +135,13 @@ Edit or drop the built-in views to change them. Dropping a view doesn't delete i
 To reset the built-in views, for example after updating Smarter Playlists, re-run `playlists.sql`. This drops and recreates the whole `playlist` schema, so any views you've added to it are lost:
 
 ```bash
-./venv/bin/smarter-playlists psql -f smarter_playlists/playlists.sql
+smarter-playlists psql -f smarter_playlists/playlists.sql
 ```
 
 ### Export
 
 ```bash
-./venv/bin/smarter-playlists export
+smarter-playlists export
 ```
 
 This creates each playlist, and any folders it needs, if it doesn't exist, or replaces its tracks if it does. Playlists that are already up to date are left alone, and each playlist's description says which view it comes from.
@@ -147,8 +159,8 @@ The first time it runs, macOS will ask for permission for your terminal to contr
 ## Stats
 
 ```bash
-./venv/bin/smarter-playlists stats
-./venv/bin/smarter-playlists stats 2025 --top 20
+smarter-playlists stats
+smarter-playlists stats 2025 --top 20
 ```
 
 A year of listening, this year unless you name another: how many plays and hours, hours by month, and your top artists (with how much you played them each month), tracks, and albums, both of any year and released that year. Plays estimated between imports count too, so it says what share of plays are estimated. The more of them there are, the rougher the months are.
@@ -158,17 +170,17 @@ A year of listening, this year unless you name another: how many plays and hours
 To keep the play history accurate and playlists up to date, import and export regularly. `smarter-playlists run` backs up, imports and exports, and this sets it to run every 2 hours, and whenever you log in:
 
 ```bash
-./venv/bin/smarter-playlists schedule install
+smarter-playlists schedule install
 ```
 
 It also runs straight away, so you can check it works:
 
 ```bash
-./venv/bin/smarter-playlists schedule status
+smarter-playlists schedule status
 tail -f ~/Library/Logs/smarter-playlists.log
 ```
 
-* Use `--every` to change how many hours apart runs are, and `--backup-dir` to keep backups somewhere else.
+* Use `--every` to change how many hours apart runs are, and `--backup-dir` to keep backups somewhere else. `--dry-run` shows the launchd agent that would be installed, without installing it.
 * It runs as a launchd agent (`~/Library/LaunchAgents/local.smarter-playlists.plist`), so only while you're logged in.
 * The first scheduled run may ask again for permission to control Music, this time for Python. If the log shows "Not authorized to send Apple events to Music", allow it in System Settings > Privacy & Security > Automation.
 * Your `PATH`, to find the same Postgres, and `SMARTER_PLAYLISTS_HOME`, if set, are saved with the schedule, so run `install` again if they change.
@@ -176,7 +188,7 @@ tail -f ~/Library/Logs/smarter-playlists.log
 To stop running on a schedule:
 
 ```bash
-./venv/bin/smarter-playlists schedule uninstall
+smarter-playlists schedule uninstall
 ```
 
 ### Run history
@@ -190,8 +202,8 @@ Smarter Playlists keeps its database in `~/Library/Application Support/smarter-p
 To query it, or edit the playlist views, `psql` starts the server, opens psql on the database, and stops the server again when you quit. Any arguments are passed to psql:
 
 ```bash
-./venv/bin/smarter-playlists psql
-./venv/bin/smarter-playlists psql -c 'SELECT count(*) FROM play'
+smarter-playlists psql
+smarter-playlists psql -c 'SELECT count(*) FROM play'
 ```
 
 For other tools, e.g. Postico or DataGrip, keep it running on a port, and connect to `localhost` on that port as user `postgres`, with no password, to the `music` database:
@@ -255,9 +267,12 @@ To change the schema, add a migration with the next number rather than editing o
 Common development tasks are available through a Makefile:
 
 ```bash
-make test      # Run tests
-make binary    # Build standalone executable (macOS only)
-make clean     # Remove venv, build artifacts, and cache
+make test              # Run unit tests
+make music-test        # Run read-only tests against your real Music library
+make music-write-test  # Test exporting to the Music app for real, in playlists it then deletes
+make binary-test       # Build the standalone executable, and test it by running it
+make binary            # Build standalone executable (macOS only)
+make clean             # Remove venv, build artifacts, and cache
 ```
 
 ### Releasing
@@ -265,19 +280,17 @@ make clean     # Remove venv, build artifacts, and cache
 Pushing a tag that matches the version in `pyproject.toml` builds the executable on macOS and attaches it to a GitHub release (see [`release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.0.0
-git push origin v2.0.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-The released executable is for Apple silicon (arm64) Macs only. On an Intel Mac, install into a virtual environment instead. It's a single file, so it has about a 6 second lag on every invocation, even `--help`. It unpacks itself into a temporary folder each time it runs, and macOS scans everything it unpacks before letting it start. Installed into a virtual environment (see [Setup](#setup)), commands start in about 0.3 seconds, so prefer that if you have Python 3.14.
+The executable is for Apple Silicon (arm64) Macs only, and is slow to start. See [Setup](#setup) for how it compares with a clone.
 
 ## Tests
 
-The tests need Postgres installed (`initdb` or `pg_config` on the `PATH`) but not running: they start their own temporary server in `/tmp`, so they never touch your database or Music library. They fake the Music library and app, so they run on Linux too.
+Postgres needs to be installed (`initdb` or `pg_config` on the `PATH`), but not running: every test starts its own temporary server in `/tmp`, so none of them touch your database.
 
-```bash
-./venv/bin/pip install -e '.[test]'
-make test
-```
-
-`pytest --integration` also runs a few read-only checks against your real Music library and the Music app. `pytest --write-music` checks exporting to the Music app for real: it makes playlists and folders named `SPIT …` in a "Smarter Playlists Integration Test" folder, and deletes them again. It takes a couple of minutes, as it waits to see that iCloud Music Library leaves them where they were put.
+* **`make test`** runs the tests. They fake the Music library and app, so they also run on Linux, and take about 20 seconds. GitHub runs them on every push and pull request. They touch nothing of yours.
+* **`make music-test`** runs those, and a few more that read your real Music library and the Music app (`pytest --music`). It only reads.
+* **`make music-write-test`** checks exporting to the Music app for real (`pytest --music-write`). It makes playlists and folders named `SPIT …` in a "Smarter Playlists Integration Test" folder, and deletes them again. It takes a couple of minutes, as it waits to see that iCloud Music Library leaves them where they were put.
+* **`make binary-test`** builds the standalone executable (`make binary`), then runs it the way a user would (`pytest --binary dist/smarter-playlists`): setting up a database, backing up and restoring it, and checking that what a schedule runs is something it accepts. It uses a temporary database, only shows the schedule rather than installing it, and makes dry runs, so it doesn't change your database, launchd or playlists. Each command takes seconds to start, so it takes a couple of minutes. The release workflow runs it before publishing.

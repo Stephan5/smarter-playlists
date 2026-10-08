@@ -1,4 +1,4 @@
-"""Exports to the real Music app, in a test folder that's deleted afterwards. Run with: pytest --write-music"""
+"""Exports to the real Music app, in a test folder that's deleted afterwards. Run with: pytest --music-write, or make music-write-test"""
 
 import subprocess
 import time
@@ -7,7 +7,7 @@ import pytest
 
 from smarter_playlists import library, playlists
 
-pytestmark = pytest.mark.writes_music
+pytestmark = pytest.mark.music_write
 
 ROOT = 'Smarter Playlists Integration Test'
 

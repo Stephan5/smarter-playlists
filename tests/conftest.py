@@ -14,18 +14,22 @@ DATABASE_NUMBERS = itertools.count()
 
 
 def pytest_addoption(parser):
-    parser.addoption('--integration', action='store_true',
+    parser.addoption('--music', action='store_true',
                      help='Also run tests that read the real Music library and talk to the Music app (read-only)')
-    parser.addoption('--write-music', action='store_true',
+    parser.addoption('--binary',
+                     help='Also run tests of this standalone executable, e.g. dist/smarter-playlists (slow)')
+    parser.addoption('--music-write', action='store_true',
                      help='Also run tests that make test playlists and folders in the Music app, then delete them')
 
 
 def pytest_collection_modifyitems(config, items):
     skips = []
-    if not config.getoption('--integration'):
-        skips.append(('integration', pytest.mark.skip(reason='needs --integration')))
-    if not config.getoption('--write-music'):
-        skips.append(('writes_music', pytest.mark.skip(reason='needs --write-music')))
+    if not config.getoption('--music'):
+        skips.append(('music', pytest.mark.skip(reason='needs --music')))
+    if not config.getoption('--binary'):
+        skips.append(('binary', pytest.mark.skip(reason='needs --binary')))
+    if not config.getoption('--music-write'):
+        skips.append(('music_write', pytest.mark.skip(reason='needs --music-write')))
     for item in items:
         for keyword, skip in skips:
             if keyword in item.keywords:
