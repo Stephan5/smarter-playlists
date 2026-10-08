@@ -45,6 +45,8 @@ def calls(monkeypatch):
         runs.append(history.Run()) or runs[-1]))
     recorded.runs = runs
     monkeypatch.setattr(history, 'log_summary', record('summary'))
+    recorded.stale = None
+    monkeypatch.setattr(history, 'stale_warning', lambda: recorded.stale)
     monkeypatch.setattr(library, 'import_library', record('import', (3, 1)))
     monkeypatch.setattr(playlists, 'export_playlists', record('export', 2))
     monkeypatch.setattr(schedule, 'install', record('install'))
@@ -127,6 +129,39 @@ def test_only_scheduled_runs_notify_of_failures(calls, monkeypatch, arguments, n
         cli.main(arguments)
 
     assert notifications == notified
+
+
+@pytest.mark.parametrize('arguments, notified', [
+    (['run', '--scheduled'], [("No successful run since yesterday", "Runs have stopped")]),
+    (['run'], []),
+])
+def test_runs_warn_when_there_has_been_no_successful_run_for_a_while(calls, monkeypatch, caplog, arguments, notified):
+    calls.stale = "No successful run since yesterday"
+    notifications = []
+    monkeypatch.setattr(schedule, 'notify', lambda message, subtitle: notifications.append((message, subtitle)))
+
+    cli.main(arguments)
+
+    assert notifications == notified
+    assert "No successful run since yesterday" in caplog.messages
+    # The run goes ahead
+    assert calls.runs
+
+
+def test_runs_dont_warn_when_runs_are_recent(calls, monkeypatch, caplog):
+    monkeypatch.setattr(schedule, 'notify', lambda *args: pytest.fail('notified'))
+
+    cli.main(['run', '--scheduled'])
+
+    assert not [record for record in caplog.records if record.levelname == 'WARNING']
+
+
+def test_schedule_status_warns_when_there_has_been_no_successful_run_for_a_while(calls, caplog):
+    calls.stale = "No successful run since yesterday"
+
+    cli.main(['schedule', 'status'])
+
+    assert "No successful run since yesterday. Is the schedule running?" in caplog.messages
 
 
 def test_scheduled_runs_notify_of_unexpected_errors(calls, monkeypatch):

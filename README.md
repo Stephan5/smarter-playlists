@@ -181,7 +181,7 @@ To stop running on a schedule:
 
 ### Run history
 
-Every `run` is recorded in the `run` table: when it started and finished, whether it was scheduled, the plays it recorded, the playlists it changed, and why it failed if it did. `schedule status` says how the last run went, and when the last successful one was if it failed. If a scheduled run fails, you also get a notification.
+Every `run` is recorded in the `run` table: when it started and finished, whether it was scheduled, the plays it recorded, the playlists it changed, and why it failed if it did. `schedule status` says how the last run went, and when the last successful one was if it failed. If a scheduled run fails, you also get a notification. You're also told, by a notification at the start of a scheduled run and by `schedule status`, if it's been over 24 hours since the last successful run, which is what happens when nothing has been running, e.g. after days logged out.
 
 ## Database
 

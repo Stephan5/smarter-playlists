@@ -107,6 +107,49 @@ class TestSummary:
                                 "stopped before it could".format(self.local(20)))
 
 
+class TestStaleWarning:
+
+    NOW = datetime.datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    @pytest.fixture
+    def warning(self, database_name, query):
+        def add_run(hours_ago, **values):
+            started_at = self.NOW - datetime.timedelta(hours=hours_ago)
+            query("""
+                INSERT INTO run (started_at, finished_at, scheduled, dry_run, error)
+                VALUES (%s, %s, TRUE, %s, %s)
+                """, [started_at, started_at + datetime.timedelta(minutes=2), values.get('dry_run', False),
+                      values.get('error')])
+        add_run.check = lambda: history.stale_warning(database_name, now=self.NOW)
+        return add_run
+
+    def local(self, hours_ago):
+        return (self.NOW - datetime.timedelta(hours=hours_ago)).astimezone().strftime('%Y-%m-%d %H:%M')
+
+    def test_nothing_without_a_successful_run(self, warning):
+        assert warning.check() is None
+        warning(30, error='Oops')
+        assert warning.check() is None
+
+    def test_nothing_when_the_last_success_is_recent(self, warning):
+        warning(23)
+        assert warning.check() is None
+
+    def test_says_how_many_hours_since_the_last_success(self, warning):
+        warning(30)
+        assert warning.check() == "No successful run since {0}, 30 hours ago".format(self.local(30))
+
+    def test_says_how_many_days_since_the_last_success(self, warning):
+        warning(24 * 3 + 5)
+        assert warning.check() == "No successful run since {0}, 3 days ago".format(self.local(24 * 3 + 5))
+
+    def test_failed_and_dry_runs_dont_count(self, warning):
+        warning(30)
+        warning(1, error='Oops')
+        warning(2, dry_run=True)
+        assert warning.check() == "No successful run since {0}, 30 hours ago".format(self.local(30))
+
+
 def test_notifies_of_failures(monkeypatch):
     commands = []
     monkeypatch.setattr(subprocess, 'run', lambda command, **kwargs: commands.append(command)
@@ -116,7 +159,8 @@ def test_notifies_of_failures(monkeypatch):
 
     # The message is an argument, so it needn't be quoted for AppleScript
     assert commands[0][0] == '/usr/bin/osascript'
-    assert commands[0][-1] == 'Music didn\'t "finish"'
+    assert commands[0][-2] == 'Music didn\'t "finish"'
+    assert commands[0][-1] == 'The scheduled run failed'
 
 
 def test_a_failure_to_notify_is_only_logged(monkeypatch, caplog):

@@ -2,11 +2,16 @@
 
 import contextlib
 import dataclasses
+import datetime
 import logging
 import signal
 
 from . import database
 from .library import plural
+
+# How long without a successful run before it's worth saying so
+STALE_AFTER = datetime.timedelta(hours=24)
+
 
 @dataclasses.dataclass
 class Run:
@@ -79,15 +84,7 @@ def log_summary(database_name=database.DATABASE):
              ORDER BY started_at DESC
              LIMIT 1
             """).fetchone()
-        last_success = db.execute("""
-            SELECT started_at
-              FROM run
-             WHERE finished_at IS NOT NULL
-               AND error IS NULL
-               AND NOT dry_run
-             ORDER BY started_at DESC
-             LIMIT 1
-            """).fetchone()
+        last_success = last_successful_start(db)
 
     if not last:
         logging.info("No runs recorded yet")
@@ -106,9 +103,38 @@ def log_summary(database_name=database.DATABASE):
         logging.info("%s failed: %s", run, error)
 
     if last_success:
-        logging.info("Last successful run at %s", local_time(last_success[0]))
+        logging.info("Last successful run at %s", local_time(last_success))
     else:
         logging.info("No successful runs yet")
+
+
+def last_successful_start(db):
+    """When the last run that finished without an error started, if there has been one."""
+    row = db.execute("""
+        SELECT started_at
+          FROM run
+         WHERE finished_at IS NOT NULL
+           AND error IS NULL
+           AND NOT dry_run
+         ORDER BY started_at DESC
+         LIMIT 1
+        """).fetchone()
+    return row[0] if row else None
+
+
+def stale_warning(database_name=database.DATABASE, now=None):
+    """Says so if it's been a while since the last successful run, which is how to tell that nothing has been running,
+    e.g. after days logged out. Nothing if there has never been a successful run, as there's nothing to compare to."""
+    with database.connect(database_name) as db:
+        last_success = last_successful_start(db)
+    if last_success is None:
+        return None
+    age = (now or datetime.datetime.now(datetime.timezone.utc)) - last_success
+    if age < STALE_AFTER:
+        return None
+    hours = int(age.total_seconds() // 3600)
+    ago = plural(hours, 'hour') if hours < 48 else plural(age.days, 'day')
+    return "No successful run since {0}, {1} ago".format(local_time(last_success), ago)
 
 
 def local_time(time):

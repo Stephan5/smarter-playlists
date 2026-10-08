@@ -180,15 +180,27 @@ def run(args):
     # Runs are added one after another to the schedule's log, so mark where each starts
     print(file=sys.stderr)
     logging.info("===== Run started%s =====", " (dry run)" if args.dry_run else "")
-    with server.work(), server.running(), history.recorded(args.scheduled, args.dry_run) as record:
-        backup.take(args.backup_dir)
-        record.plays_recorded, record.plays_estimated = library.import_library(database.DATABASE)
-        try:
-            record.playlists_changed = playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
-            record.playlists_failed = 0
-        except playlists.ExportFailed as failure:
-            record.playlists_changed, record.playlists_failed = failure.changed, failure.failed
-            raise
+    with server.work(), server.running():
+        warn_if_stale(args)
+        with history.recorded(args.scheduled, args.dry_run) as record:
+            backup.take(args.backup_dir)
+            record.plays_recorded, record.plays_estimated = library.import_library(database.DATABASE)
+            try:
+                record.playlists_changed = playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)
+                record.playlists_failed = 0
+            except playlists.ExportFailed as failure:
+                record.playlists_changed, record.playlists_failed = failure.changed, failure.failed
+                raise
+
+
+def warn_if_stale(args):
+    """Scheduled runs are frequent, so a long gap since the last good one means launchd wasn't running them."""
+    warning = history.stale_warning()
+    if warning:
+        logging.warning("%s", warning)
+        # Runs you start yourself show it in the terminal
+        if args.scheduled:
+            schedule.notify(warning, "Runs have stopped")
 
 
 def show_stats(args):
@@ -231,6 +243,9 @@ def schedule_status(args):
     if server.initialised():
         with server.running():
             history.log_summary()
+            warning = history.stale_warning()
+            if warning:
+                logging.warning("%s. Is the schedule running?", warning)
 
 
 def status(args):

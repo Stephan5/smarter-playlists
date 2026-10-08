@@ -79,12 +79,17 @@ def status():
 
 def notify_failure(message):
     """Shows a macOS notification that a scheduled run failed. If that fails too, it's only logged."""
+    notify(message, "The scheduled run failed")
+
+
+def notify(message, subtitle):
+    """Shows a macOS notification. If that fails, it's only logged."""
     script = ['-e', 'on run argv',
               '-e', 'display notification (item 1 of argv) with title "Smarter Playlists" '
-                    'subtitle "The scheduled run failed"',
+                    'subtitle (item 2 of argv)',
               '-e', 'end run']
     try:
-        process = subprocess.run(['/usr/bin/osascript', *script, message], capture_output=True, text=True)
+        process = subprocess.run(['/usr/bin/osascript', *script, message, subtitle], capture_output=True, text=True)
     except OSError as error:
         logging.warning("Couldn't show a notification: %s", error)
         return
