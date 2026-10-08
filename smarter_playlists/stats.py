@@ -10,8 +10,8 @@ SPARKS = '▁▂▃▄▅▆▇█'
 BAR_WIDTH = 40
 NAME_WIDTH = 60
 
-# Every play in the year, by the database's time zone, as the playlists group them. Plays of tracks since removed from
-# the library still count.
+# Every play in the year, by the database's time zone, as the playlists group them, from the history_start setting.
+# Plays of tracks since removed from the library still count.
 YEAR_PLAYS = """
     WITH year_plays AS (
         SELECT play.track_id, play.played_at, play.estimated, track.duration_ms, track.artist_id, track.album_id
@@ -19,6 +19,7 @@ YEAR_PLAYS = """
           JOIN track USING (track_id)
          WHERE play.played_at >= %(start)s
            AND play.played_at < %(end)s
+           AND play.played_at::date >= (SELECT history_start FROM setting)
     )
 """
 

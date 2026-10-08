@@ -73,14 +73,27 @@ Music only tells us how many times a track has been played and when it was last 
 The first import has nothing to go on, so it spreads each track's past plays evenly from the start of 2010 up to its last play. After that, the more often the import runs, the smaller the gaps and the more accurate the history.
 Add `WHERE NOT estimated` to a query to count only the plays that were actually observed.
 
+### History start
+
+Plays from before you started importing are only guesses, so the playlist views and `stats` ignore any before the `history_start` date in the `setting` table, which `setup` sets to the day it ran. That covers `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day` and `seasons`. Views built from each track's play count, like `"All-Time Favourites"`, aren't affected, as Music keeps no dates for those plays.
+
+To use a different date, e.g. the day your install started recording real plays, change it and export again. The date is compared with the date of each play in the database's time zone. `'-infinity'` ignores nothing:
+
+```bash
+smarter-playlists psql -c "UPDATE setting SET history_start = DATE '2026-10-06'"
+smarter-playlists export
+```
+
+Playlists from months before the new date stay in Music, as playlists are never deleted.
+
 ## Playlists
 
 Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
 
 | View                     | Playlists                                                                                                                                                                                                                    |
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `monthly`                | The 50 most played tracks of each month since October 2026, named like "October 2026", at most 2 per album and 5 per artist. A new one appears each month, in a folder for its year.                                         |
-| `yearly`                 | The 100 most played tracks of each year since 2026, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                                                      |
+| `monthly`                | The 50 most played tracks of each month since the [history start](#history-start), named like "October 2026", at most 2 per album and 5 per artist. A new one appears each month, in a folder for its year.                                         |
+| `yearly`                 | The 100 most played tracks of each year since the history start, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                                                      |
 | `"Last Month"`           | The 50 most played tracks of the last 30 days, at most 2 per album and 5 per artist.                                                                                                                                         |
 | `"Rising"`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 2 per album and 3 per artist.                                    |
 | `top_artists`            | A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks, in a "Top Artists" folder.                                                                                           |
@@ -163,7 +176,7 @@ smarter-playlists stats
 smarter-playlists stats 2025 --top 20
 ```
 
-A year of listening, this year unless you name another: how many plays and hours, hours by month, and your top artists (with how much you played them each month), tracks, and albums, both of any year and released that year. Plays estimated between imports count too, so it says what share of plays are estimated. The more of them there are, the rougher the months are.
+A year of listening from the [history start](#history-start), this year unless you name another: how many plays and hours, hours by month, and your top artists (with how much you played them each month), tracks, and albums, both of any year and released that year. Plays estimated between imports count too, so it says what share of plays are estimated. The more of them there are, the rougher the months are.
 
 ## Running on a schedule
 

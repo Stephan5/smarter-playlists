@@ -4,10 +4,12 @@
 -- named after the view, or, if it has a playlist column, as one playlist for each distinct value of that column.
 -- A folder column puts playlists in a folder, with / between nested folders, e.g. 'Smarter Playlists/2026'.
 --
--- Months and years follow the database's time zone. Start dates are compared as dates rather than timestamps, which
--- would be fixed to the time zone the view was created in and could disagree with how plays are grouped.
+-- Views built from plays ignore any before the history_start setting, the date real play data starts from. Change it
+-- with `UPDATE setting SET history_start = DATE '2026-10-06'`. Months and years follow the database's time zone. It's
+-- compared as a date rather than a timestamp, which would be fixed to the time zone the view was created in and could
+-- disagree with how plays are grouped.
 
--- The most played tracks of each month since October 2026, named like "October 2026", with at most 2 tracks from any
+-- The most played tracks of each month since history_start, named like "October 2026", with at most 2 tracks from any
 -- album and 5 from any artist. A new playlist appears each month, in a folder for its year.
 
 DROP SCHEMA IF EXISTS playlist CASCADE;
@@ -32,7 +34,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
                   FROM (SELECT DATE_TRUNC('month', played_at) AS month, track_id, album_id, artist_id, played_at
                           FROM play
                           JOIN track USING (track_id)
-                         WHERE played_at::date >= DATE '2026-10-01'
+                         WHERE played_at::date >= (SELECT history_start FROM setting)
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY month, track_id, album_id, artist_id) AS track_plays
@@ -40,7 +42,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
            AND artist_rank <= 5) AS ranked
  WHERE position <= 50;
 
--- The most played tracks of each year since 2026, named like "2026", with at most 5 tracks from any album and 10 from
+-- The most played tracks of each year since history_start, named like "2026", with at most 5 tracks from any album and 10 from
 -- any artist. A new playlist appears each year, in a folder for its year alongside its monthly playlists.
 CREATE VIEW playlist.yearly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
@@ -61,7 +63,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
                   FROM (SELECT DATE_TRUNC('year', played_at) AS year, track_id, album_id, artist_id, played_at
                           FROM play
                           JOIN track USING (track_id)
-                         WHERE played_at::date >= DATE '2026-01-01'
+                         WHERE played_at::date >= (SELECT history_start FROM setting)
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY year, track_id, album_id, artist_id) AS track_plays
@@ -84,6 +86,7 @@ SELECT 'Smarter Playlists' AS folder,
           FROM play
           JOIN track USING (track_id)
          WHERE played_at >= now() - INTERVAL '30 days'
+           AND played_at::date >= (SELECT history_start FROM setting)
            AND removed_at IS NULL
            AND NOT playlist_only
          GROUP BY track_id, album_id, artist_id) AS track_plays
@@ -115,6 +118,7 @@ SELECT 'Smarter Playlists' AS folder,
                   FROM play
                   JOIN track USING (track_id)
                  WHERE played_at >= now() - INTERVAL '120 days'
+                   AND played_at::date >= (SELECT history_start FROM setting)
                    AND removed_at IS NULL
                    AND NOT playlist_only
                  GROUP BY track_id, album_id, artist_id) AS track_plays
@@ -159,7 +163,7 @@ SELECT 'Smarter Playlists' AS folder,
           FROM track
          WHERE removed_at IS NULL
            AND NOT playlist_only) AS ranked
- WHERE artist_rank <= 5
+ WHERE artist_rank <= 10
  ORDER BY position
  LIMIT 100;
 
@@ -221,6 +225,7 @@ SELECT 'Smarter Playlists/Time of Day' AS folder,
                           FROM play
                           JOIN track USING (track_id)
                          WHERE played_at >= now() - INTERVAL '1 year'
+                           AND played_at::date >= (SELECT history_start FROM setting)
                            AND NOT estimated
                            AND removed_at IS NULL
                            AND NOT playlist_only
@@ -260,7 +265,8 @@ SELECT 'Smarter Playlists/Seasons' AS folder,
                                MAX(played_at) AS last_played_at
                           FROM play
                           JOIN track USING (track_id)
-                         WHERE NOT estimated
+                         WHERE played_at::date >= (SELECT history_start FROM setting)
+                           AND NOT estimated
                            AND removed_at IS NULL
                            AND NOT playlist_only
                          GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked

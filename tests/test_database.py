@@ -10,7 +10,7 @@ def test_creates_tables(database_name, query):
           FROM information_schema.tables
          WHERE table_schema = 'public'
          ORDER BY 1
-        """) == [('album',), ('artist',), ('play',), ('run',), ('schema_migration',), ('track',)]
+        """) == [('album',), ('artist',), ('play',), ('run',), ('schema_migration',), ('setting',), ('track',)]
 
 
 def test_creates_only_the_playlist_schema(database_name, query):
@@ -168,11 +168,11 @@ class TestMigrations:
                 database.require_set_up(db)
 
     def test_a_database_from_before_migrations_were_recorded_has_the_first(self, database_name, query, newer):
-        query("DROP TABLE schema_migration")
-        newer(**{'02__AddNote': "CREATE TABLE note (note_id INT)"})
+        query("DROP TABLE schema_migration, setting CASCADE")
+        newer(**{'03__AddNote': "CREATE TABLE note (note_id INT)"})
 
-        assert database.migrate(database_name) == 1
-        assert self.applied(query) == ['01__InitialSchema', '02__AddNote']
+        assert database.migrate(database_name) == 2
+        assert self.applied(query) == ['01__InitialSchema', '02__AddHistoryStart', '03__AddNote']
 
     def test_a_database_from_a_newer_version_is_refused(self, database_name, query):
         query("INSERT INTO schema_migration (version, name) VALUES (99, '99__FromTheFuture')")

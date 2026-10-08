@@ -45,6 +45,7 @@ class TestReport:
     @pytest.fixture
     def plays(self, run_import, query):
         """Two Radiohead tracks and one by Warpaint, with these plays in 2025 (and some in 2024, which don't count)."""
+        query("UPDATE setting SET history_start = '-infinity'")
         run_import(
             make_track(track_id='A000000000000001', title='Weird Fishes', duration_ms=6 * 60_000),
             make_track(track_id='A000000000000002', title='Reckoner', duration_ms=5 * 60_000,
@@ -117,3 +118,11 @@ class TestReport:
 
         artists = lines.index("Top artists      plays  Jan–Dec")
         assert lines[artists + 1:artists + 3] == ["   1  Radiohead      7  █ ▆", ""]
+
+    def test_ignores_plays_before_history_start(self, database_name, plays, query):
+        query("UPDATE setting SET history_start = DATE '2025-03-02'")
+
+        report = stats.report(2025, database_name=database_name)
+
+        # From 2 March: two plays of 5 minutes and two of 4, none of them estimated
+        assert report[2:5] == ["4 plays, 0.3 h of listening", "2 tracks by 2 artists, from 2 albums", ""]
