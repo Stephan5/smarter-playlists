@@ -13,19 +13,21 @@ clean:
 	rm -rf venv build dist *.egg-info .pytest_cache __pycache__
 
 
-# The virtual environment, with the package and its dependencies, and what's needed to test and build it. Made again
-# when pyproject.toml changes. The executable is built from what's installed here, so without this it would be missing
+# The virtual environment, with the package and its dependencies, and what's needed to test it. Made again when
+# pyproject.toml changes. The executable is built from what's installed here, so without this it would be missing
 # whatever isn't.
 venv/.installed: pyproject.toml
 	python3 -m venv venv
-	./venv/bin/pip install -e '.[test]' pyinstaller
+	./venv/bin/pip install -e '.[test]'
 	@touch venv/.installed
 
 binary: venv/.installed
+	./venv/bin/pip install pyinstaller
 	./venv/bin/pyinstaller --noconfirm smarter-playlists.spec
 
+# Extra arguments for pytest, e.g. make test PYTEST_ARGS=-v
 test: venv/.installed
-	./venv/bin/python -m pytest
+	./venv/bin/python -m pytest $(PYTEST_ARGS)
 
 # Builds the standalone executable, then runs it as a user would. Slow, as every command it runs takes seconds to start.
 binary-test: binary

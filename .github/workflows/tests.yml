@@ -37,8 +37,5 @@ jobs:
           fi
           ls -d /usr/lib/postgresql/*/bin | sort --version-sort | tail -n 1 >> "$GITHUB_PATH"
 
-      - name: Install
-        run: pip install -e '.[test]'
-
       - name: Test
-        run: pytest -v
+        run: make test PYTEST_ARGS=-v
