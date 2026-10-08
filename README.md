@@ -269,7 +269,7 @@ git tag v2.0.0
 git push origin v2.0.0
 ```
 
-The released executable is a single file, so it has about a 6 second lag on every invocation, even `--help`. It unpacks itself into a temporary folder each time it runs, and macOS scans everything it unpacks before letting it start. Installed into a virtual environment (see [Setup](#setup)), commands start in about 0.3 seconds, so prefer that if you have Python 3.14.
+The released executable is for Apple silicon (arm64) Macs only. On an Intel Mac, install into a virtual environment instead. It's a single file, so it has about a 6 second lag on every invocation, even `--help`. It unpacks itself into a temporary folder each time it runs, and macOS scans everything it unpacks before letting it start. Installed into a virtual environment (see [Setup](#setup)), commands start in about 0.3 seconds, so prefer that if you have Python 3.14.
 
 ## Tests
 

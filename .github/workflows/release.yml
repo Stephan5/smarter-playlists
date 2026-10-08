@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   release:
-    # The executable reads the Music library and talks to the Music app, so it can only be built on macOS
+    # The executable reads the Music library and talks to the Music app, so it can only be built on macOS. Only for
+    # Apple silicon (arm64), which is what macos-latest is. The Intel runners would need a build of their own.
     runs-on: macos-latest
 
     steps:
@@ -30,6 +31,13 @@ jobs:
             exit 1
           fi
 
+      - name: Check this is Apple silicon
+        run: |
+          if [ "$(uname -m)" != arm64 ]; then
+            echo "Expected an arm64 runner, got $(uname -m). The release is named and documented as arm64 only" >&2
+            exit 1
+          fi
+
       - name: Install
         run: pip install -e . pyinstaller
 
@@ -41,7 +49,7 @@ jobs:
 
       - name: Package
         run: |
-          name="smarter-playlists-$GITHUB_REF_NAME-macos-$(uname -m)"
+          name="smarter-playlists-$GITHUB_REF_NAME-macos-arm64"
           mkdir "$name"
           cp dist/smarter-playlists README.md "$name"
           zip -r "$name.zip" "$name"
@@ -51,4 +59,5 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" --title "$GITHUB_REF_NAME" --generate-notes \
+            --notes "macOS, Apple silicon (arm64) only. Intel Macs can install from source, see the README."
