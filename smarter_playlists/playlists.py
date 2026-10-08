@@ -6,7 +6,7 @@ import subprocess
 
 from psycopg import sql
 
-from . import database
+from . import database, timing
 
 PLAYLISTS_SCHEMA = 'playlist'
 
@@ -62,10 +62,13 @@ def export_playlists(database_name, names=(), dry_run=False):
         logging.warning("No playlists found in the %s schema", PLAYLISTS_SCHEMA)
         return 0
 
-    # Music takes a while, a minute or more, to update many playlists
-    logging.info("%s %d playlists in Music...", "Checking" if dry_run else "Updating", len(playlists))
+    # Music takes a while, a minute or more, to update many playlists, and says nothing until it's done
+    logging.info("%s %d playlists in Music, which can take a minute...", "Checking" if dry_run else "Updating",
+                 len(playlists))
+    elapsed = timing.Stopwatch()
+    results = sync_playlists(playlists, dry_run)
     changed = failed = 0
-    for playlist, result in zip(playlists.values(), sync_playlists(playlists, dry_run)):
+    for playlist, result in zip(playlists.values(), results):
         if 'error' in result:
             logging.error("Couldn't export playlist '%s': %s", playlist.path, result['error'])
             failed += 1
@@ -86,6 +89,8 @@ def export_playlists(database_name, names=(), dry_run=False):
                 action = 'Would update' if dry_run else 'Updated'
             logging.info("%s playlist '%s' with %d tracks", action, playlist.path, result['tracks'])
 
+    logging.info("%s %d playlists in %s, %d %s", "Checked" if dry_run else "Updated", len(playlists), elapsed, changed,
+                 "would change" if dry_run else "changed")
     if failed:
         raise ExportFailed(changed, failed, len(playlists))
     return changed

@@ -1,12 +1,15 @@
 import fcntl
 import os
 import pathlib
+import re
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
+import time
 
 import psycopg
 import pytest
@@ -167,6 +170,32 @@ def test_only_one_command_works_at_a_time(cluster):
     with server.work(), open(server.home() / 'work.lock', 'a') as other:
         with pytest.raises(BlockingIOError):
             fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def test_says_when_it_is_waiting_for_another_command(cluster, caplog):
+    caplog.set_level('INFO')
+    with server.work():
+        pass
+    assert caplog.messages == []
+
+    entered = threading.Event()
+
+    def other_command():
+        with server.work():
+            entered.set()
+
+    with server.work():
+        thread = threading.Thread(target=other_command)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while not caplog.messages and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert not entered.is_set()
+    thread.join(5)
+
+    assert entered.is_set()
+    assert caplog.messages[0] == "Waiting for another Smarter Playlists command, e.g. a scheduled run, to finish..."
+    assert re.fullmatch(r'Waited \d+\.\ds', caplog.messages[1])
 
 
 def test_requires_a_database(tmp_path, monkeypatch):

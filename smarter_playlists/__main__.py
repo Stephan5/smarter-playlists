@@ -5,7 +5,7 @@ import signal
 import subprocess
 import sys
 
-from . import backup, database, history, library, playlists, schedule, server, stats
+from . import backup, database, history, library, playlists, schedule, server, stats, timing
 
 LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -193,6 +193,7 @@ def run(args):
     # Runs are added one after another to the schedule's log, so mark where each starts
     print(file=sys.stderr)
     logging.info("===== Run started%s =====", " (dry run)" if args.dry_run else "")
+    elapsed = timing.Stopwatch()
     with server.work(), server.running():
         warn_if_stale(args)
         with history.recorded(args.scheduled, args.dry_run) as record:
@@ -206,6 +207,7 @@ def run(args):
                 record.playlists_changed, record.playlists_failed = failure.changed, failure.failed
                 raise
         warn_if_estimates_rising(args, record)
+    logging.info("===== Run finished in %s =====", elapsed)
 
 
 def warn_if_estimates_rising(args, record):

@@ -12,6 +12,8 @@ import re
 import shutil
 import subprocess
 
+from . import timing
+
 USER = 'postgres'
 DEFAULT_PORT = 5432
 
@@ -174,14 +176,19 @@ def start(tcp_port=None, settings=None):
     if tcp_port:
         options += ['-p {0}'.format(tcp_port), "-c listen_addresses=localhost"]
     options += ['-c {0}={1}'.format(name, value) for name, value in (settings or {}).items()]
+    logging.info("Starting Postgres...")
+    elapsed = timing.Stopwatch()
     run([program('pg_ctl'), 'start', '-D', data_dir(), '-l', log_path(), '-w',
          *(['-o', ' '.join(options)] if options else [])], env=server_environment())
-    logging.info("Started Postgres %d%s", cluster_version(), " on port {0}".format(tcp_port) if tcp_port else "")
+    logging.info("Started Postgres %d%s in %s", cluster_version(), " on port {0}".format(tcp_port) if tcp_port else "",
+                 elapsed)
 
 
 def stop():
+    logging.info("Stopping Postgres...")
+    elapsed = timing.Stopwatch()
     run([program('pg_ctl'), 'stop', '-D', data_dir(), '-m', 'fast', '-w'])
-    logging.info("Stopped Postgres")
+    logging.info("Stopped Postgres in %s", elapsed)
 
 
 def warn_if_outdated():
@@ -191,11 +198,24 @@ def warn_if_outdated():
                         "to it", cluster_version(), installed)
 
 
+# What a command is waiting for when it can't get a lock straight away, as nothing else says why it's stuck
+WAITING_FOR = {
+    'start.lock': "another Smarter Playlists command to finish starting or stopping the database",
+    'work.lock': "another Smarter Playlists command, e.g. a scheduled run, to finish",
+}
+
+
 @contextlib.contextmanager
 def lock(name, operation=fcntl.LOCK_EX):
     home().mkdir(parents=True, exist_ok=True)
     with open(home() / name, 'a') as file:
-        fcntl.flock(file, operation)
+        try:
+            fcntl.flock(file, operation | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logging.info("Waiting for %s...", WAITING_FOR.get(name, "another command"))
+            elapsed = timing.Stopwatch()
+            fcntl.flock(file, operation)
+            logging.info("Waited %s", elapsed)
         yield file
 
 

@@ -6,7 +6,7 @@ import pathlib
 import re
 import tempfile
 
-from . import database, server
+from . import database, server, timing
 
 NAME_FORMAT = 'music-%Y-%m-%dT%H%M%S.dump'
 NAME_PATTERN = re.compile(r'music-\d{4}-\d\d-\d\dT\d{6}\.dump')
@@ -35,8 +35,10 @@ def take(directory=None, database_name=database.DATABASE, now=None):
     directory.mkdir(parents=True, exist_ok=True)
     now = now or datetime.datetime.now()
     path = directory / now.strftime(NAME_FORMAT)
+    logging.info("Backing up the database...")
+    elapsed = timing.Stopwatch()
     dump(path, database_name)
-    logging.info("Backed up to %s (%s)", path, size(path))
+    logging.info("Backed up to %s (%s) in %s", path, size(path), elapsed)
     prune(directory, now)
     return path
 

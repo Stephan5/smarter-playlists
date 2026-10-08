@@ -96,10 +96,28 @@ def test_run_starts_with_a_header(calls, caplog, capsys):
     cli.main(['run'])
     cli.main(['run', '--dry-run'])
 
-    assert [message for message in caplog.messages if message.startswith('=====')] == [
+    assert [message for message in caplog.messages if message.startswith('===== Run started')] == [
         '===== Run started =====', '===== Run started (dry run) =====']
     # With a blank line before each, to separate it from the run before
     assert capsys.readouterr().err == '\n\n'
+
+
+def test_run_says_when_it_has_finished(calls, caplog):
+    caplog.set_level('INFO')
+
+    cli.main(['run'])
+
+    assert re.fullmatch(r'===== Run finished in \d\.\ds =====', caplog.messages[-1])
+
+
+def test_a_failed_run_does_not_say_it_finished(calls, caplog, monkeypatch):
+    monkeypatch.setattr(library, 'import_library', lambda *args: 1 / 0)
+    caplog.set_level('INFO')
+
+    with pytest.raises(SystemExit):
+        cli.main(['run'])
+
+    assert not [message for message in caplog.messages if 'finished' in message]
 
 
 def test_run_records_what_it_did(calls):

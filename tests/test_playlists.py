@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 import types
 
 import pytest
@@ -383,8 +384,14 @@ def test_reports_what_changed(database_name, query, tracks, no_builtin_playlists
 
     playlists.export_playlists(database_name, dry_run=dry_run)
 
-    assert [(record.levelname, record.getMessage()) for record in caplog.records] == [
-        ('INFO', "{0} 1 playlists in Music...".format("Checking" if dry_run else "Updating")), (level, message)]
+    *logged, summary = [(record.levelname, record.getMessage()) for record in caplog.records]
+    assert logged == [
+        ('INFO', "{0} 1 playlists in Music, which can take a minute...".format("Checking" if dry_run else "Updating")),
+        (level, message)]
+    changed = int(result['changed'])
+    assert summary[0] == 'INFO'
+    assert re.fullmatch(r"{0} 1 playlists in \d+\.\ds, {1} {2}".format(
+        "Checked" if dry_run else "Updated", changed, "would change" if dry_run else "changed"), summary[1])
 
 
 @pytest.mark.parametrize('time_zone, expected', [
