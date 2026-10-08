@@ -31,7 +31,7 @@ python3 -m venv venv
 
 The library is read with Apple's [iTunesLibrary framework](https://developer.apple.com/documentation/ituneslibrary), so there's no need to export a library file and the Music app doesn't need to be running.
 
-Each import brings the database up to date with the library (see [`schema.sql`](smarter_playlists/schema.sql)):
+Each import brings the database up to date with the library (see [`01__InitialSchema.sql`](smarter_playlists/migrations/01__InitialSchema.sql)):
 
 * `track`, `artist` and `album` - every song in the library. IDs are the persistent IDs Music itself uses.
 * `play` - one row for every play of every track.
@@ -235,6 +235,20 @@ The database only works with the major version of Postgres that made it, e.g. 18
 ```bash
 ./venv/bin/smarter-playlists upgrade
 ```
+
+### Schema changes
+
+The database schema is built up by the files in [`smarter_playlists/migrations`](smarter_playlists/migrations), named like `02__AddSomething.sql`. `setup` applies them all, and each one is recorded in the `schema_migration` table once applied.
+
+After updating Smarter Playlists, `import` and `run` apply any new ones, right after backing up the database. To do it without importing, or to see that it's up to date:
+
+```bash
+./venv/bin/smarter-playlists migrate
+```
+
+Other commands refuse to run on an out of date database, and on one made by a newer version than the one installed. Each migration is applied in a transaction of its own, so one that fails changes nothing, and the ones before it are kept.
+
+To change the schema, add a migration with the next number rather than editing one that's been released. It's plain SQL, and doesn't need to touch the `playlist` views, which are only reset by re-running `playlists.sql`.
 
 ## Development
 

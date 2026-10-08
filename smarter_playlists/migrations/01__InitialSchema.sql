@@ -1,5 +1,8 @@
--- Initial database setup, applied by `smarter-playlists setup`. IDs are Music's persistent IDs as 16 hex digits,
+-- The database as first set up, applied by `smarter-playlists setup`. IDs are Music's persistent IDs as 16 hex digits,
 -- the same IDs the Music app uses for scripting, so a track can always be found again when exporting a playlist.
+--
+-- Changes to the schema after this go in new files here, named like 02__AddSomething.sql. They're applied in order, each
+-- once, and never edited after they're released. See database.py.
 
 CREATE TABLE artist (
     artist_id TEXT NOT NULL PRIMARY KEY,

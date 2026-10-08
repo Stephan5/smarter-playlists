@@ -67,6 +67,11 @@ def parse_args(arg_list):
                                   help='Back up the database, then import the Music library')
     import_.set_defaults(command=import_library)
 
+    migrate_ = commands.add_parser('migrate', parents=[common, backups],
+                                   help='Bring the database up to date with this version, after backing it up. '
+                                        'Import and run do this too')
+    migrate_.set_defaults(command=migrate)
+
     export_ = commands.add_parser('export', parents=[common], help='Export playlists to Music')
     add_export_arguments(export_)
     export_.set_defaults(command=export)
@@ -168,7 +173,15 @@ def setup(args):
 def import_library(args):
     with server.work(), server.running():
         backup.take(args.backup_dir)
+        database.migrate()
         library.import_library(database.DATABASE)
+
+
+def migrate(args):
+    with server.work(), server.running():
+        # Backed up first, as a migration can't always be undone
+        if not database.migrate(before=lambda: backup.take(args.backup_dir)):
+            logging.info("The database is up to date")
 
 
 def export(args):
@@ -184,6 +197,7 @@ def run(args):
         warn_if_stale(args)
         with history.recorded(args.scheduled, args.dry_run) as record:
             backup.take(args.backup_dir)
+            database.migrate()
             record.plays_recorded, record.plays_estimated = library.import_library(database.DATABASE)
             try:
                 record.playlists_changed = playlists.export_playlists(database.DATABASE, args.playlists, args.dry_run)

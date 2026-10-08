@@ -27,7 +27,7 @@ smarter-playlists = "smarter_playlists.__main__:main"
 packages = ["smarter_playlists"]
 
 [tool.setuptools.package-data]
-smarter_playlists = ["*.sql", "*.js"]
+smarter_playlists = ["*.sql", "*.js", "migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -36,6 +36,7 @@ def calls(monkeypatch):
     monkeypatch.setattr(server, 'stop_when_unused', record('db stop'))
     monkeypatch.setattr(database, 'create', record('create'))
     monkeypatch.setattr(database, 'set_up', record('setup'))
+    monkeypatch.setattr(database, 'migrate', lambda before=None: recorded.append(('migrate', before is not None)) or 0)
     monkeypatch.setattr(backup, 'take', record('backup'))
     monkeypatch.setattr(backup, 'restore', record('restore'))
     monkeypatch.setattr(backup, 'upgrade', record('upgrade'))
@@ -59,17 +60,19 @@ def calls(monkeypatch):
 
 @pytest.mark.parametrize('arguments, expected', [
     (['setup'], ['work', 'running', ('create',), ('setup',), '/running', '/work']),
-    (['import'], ['work', 'running', ('backup', None), ('import', 'music'), '/running', '/work']),
-    (['import', '--backup-dir', '/backups'], ['work', 'running', ('backup', '/backups'), ('import', 'music'),
+    (['import'], ['work', 'running', ('backup', None), ('migrate', False), ('import', 'music'), '/running', '/work']),
+    (['import', '--backup-dir', '/backups'], ['work', 'running', ('backup', '/backups'), ('migrate', False), ('import', 'music'),
                                               '/running', '/work']),
     (['export'], ['work', 'running', ('export', 'music', [], False), '/running', '/work']),
     (['export', '--dry-run', 'October 2026', '2026'],
      ['work', 'running', ('export', 'music', ['October 2026', '2026'], True), '/running', '/work']),
-    (['run', '-v'], ['work', 'running', 'recorded', ('backup', None), ('import', 'music'),
+    (['run', '-v'], ['work', 'running', 'recorded', ('backup', None), ('migrate', False), ('import', 'music'),
                      ('export', 'music', [], False), '/recorded', '/running', '/work']),
     (['run', '--scheduled', '--dry-run'], ['work', 'running', 'recorded scheduled dry run', ('backup', None),
-                                           ('import', 'music'), ('export', 'music', [], True), '/recorded scheduled dry run',
+                                           ('migrate', False), ('import', 'music'), ('export', 'music', [], True),
+                                           '/recorded scheduled dry run',
                                            '/running', '/work']),
+    (['migrate'], ['work', 'running', ('migrate', True), '/running', '/work']),
     (['backup'], ['work', 'running', ('backup', None), '/running', '/work']),
     (['restore', 'old.dump'], ['work', 'running', ('restore', 'old.dump', None), '/running', '/work']),
     (['upgrade'], ['work', ('upgrade',), '/work']),
