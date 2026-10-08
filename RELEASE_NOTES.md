@@ -2,6 +2,28 @@
 
 Newest first. A release's description on GitHub is its section here.
 
+## 1.0.1
+
+macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
+
+### Fixed
+
+* **Scheduling from the standalone executable.** In 1.0.0, `schedule install` wrote a launchd job that failed on every run, with `invalid choice: 'smarter_playlists'`, so nothing was ever imported or exported. If you scheduled it from the 1.0.0 executable, download this one and run `smarter-playlists schedule install` again to replace the job. Installing from a clone was never affected.
+
+### Added
+
+* `schedule install --dry-run` shows the launchd agent that would be installed, without installing it.
+
+### Changed
+
+* The executable is now tested by running it, before a release is published: setting up a database, migrating, backing up and restoring, keeping the database running for other tools, and checking that what a schedule runs is something it accepts. `make binary-test` does this locally.
+* The test commands are `make test`, `make music-test` (reads your real Music library), `make music-write-test` (exports to Music for real) and `make binary-test`. The pytest flags are now `--music` and `--music-write`, not `--integration` and `--write-music`.
+* The README compares installing from a clone with the executable.
+
+### Download
+
+The executable is a single file, so every command takes about 6 seconds to start while macOS scans what it unpacks. A clone, installed into a virtual environment, starts in about 0.3 seconds. Either way, PostgreSQL has to be installed.
+
 ## 1.0.0
 
 A ground-up rewrite. It imports your Apple Music library into PostgreSQL, keeps a history of every play, and exports SQL views back to Music as playlists.
