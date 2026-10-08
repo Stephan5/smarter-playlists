@@ -175,3 +175,95 @@ SELECT 'Smarter Playlists' AS folder,
    AND NOT playlist_only
  ORDER BY position
  LIMIT 100;
+
+-- Recently added tracks you haven't played yet, newest first. The date added isn't always when a track first arrived, as
+-- tracks get added to the library again, but a track that was played before wouldn't be unplayed.
+CREATE VIEW playlist."New and Unplayed" AS
+SELECT 'Smarter Playlists' AS folder,
+       track_id,
+       ROW_NUMBER() OVER (ORDER BY added_at DESC, track_id) AS position
+  FROM track
+ WHERE added_at >= now() - INTERVAL '60 days'
+   AND play_count = 0
+   AND removed_at IS NULL
+   AND NOT playlist_only
+ ORDER BY position
+ LIMIT 100;
+
+-- What you play at different times of the day over the last year: Morning (5am to noon), Afternoon (noon to 5pm),
+-- Evening (5pm to 10pm) and Late Night (10pm to 5am), by the database's time zone. A playlist for each, with at most
+-- 2 tracks from any album and 5 from any artist. Estimated plays are left out, as they have no real time of day.
+CREATE VIEW playlist.time_of_day AS
+SELECT 'Smarter Playlists/Time of Day' AS folder,
+       period AS playlist,
+       track_id,
+       position
+  FROM (SELECT period,
+               track_id,
+               ROW_NUMBER() OVER (PARTITION BY period ORDER BY plays DESC, last_played_at DESC, track_id) AS position
+          FROM (SELECT period,
+                       track_id,
+                       plays,
+                       last_played_at,
+                       ROW_NUMBER() OVER (PARTITION BY period, album_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS album_rank,
+                       ROW_NUMBER() OVER (PARTITION BY period, artist_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS artist_rank
+                  FROM (SELECT CASE WHEN EXTRACT(HOUR FROM played_at) BETWEEN 5 AND 11 THEN 'Morning'
+                                    WHEN EXTRACT(HOUR FROM played_at) BETWEEN 12 AND 16 THEN 'Afternoon'
+                                    WHEN EXTRACT(HOUR FROM played_at) BETWEEN 17 AND 21 THEN 'Evening'
+                                    ELSE 'Late Night' END AS period,
+                               track_id,
+                               album_id,
+                               artist_id,
+                               COUNT(*) AS plays,
+                               MAX(played_at) AS last_played_at
+                          FROM play
+                          JOIN track USING (track_id)
+                         WHERE played_at >= now() - INTERVAL '1 year'
+                           AND NOT estimated
+                           AND removed_at IS NULL
+                           AND NOT playlist_only
+                         GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked
+         WHERE album_rank <= 2
+           AND artist_rank <= 5) AS limited
+ WHERE position <= 50;
+
+-- What you play in each season, across every year: Winter (December to February), Spring (March to May), Summer
+-- (June to August) and Autumn (September to November). For the southern hemisphere, swap the names around. A playlist
+-- for each, of up to 50 tracks with at most 2 from any album and 5 from any artist. Estimated plays are left out, as
+-- they aren't at a real time of year.
+CREATE VIEW playlist.seasons AS
+SELECT 'Smarter Playlists/Seasons' AS folder,
+       season AS playlist,
+       track_id,
+       position
+  FROM (SELECT season,
+               track_id,
+               ROW_NUMBER() OVER (PARTITION BY season ORDER BY plays DESC, last_played_at DESC, track_id) AS position
+          FROM (SELECT season,
+                       track_id,
+                       plays,
+                       last_played_at,
+                       ROW_NUMBER() OVER (PARTITION BY season, album_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS album_rank,
+                       ROW_NUMBER() OVER (PARTITION BY season, artist_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS artist_rank
+                  FROM (SELECT CASE WHEN EXTRACT(MONTH FROM played_at) IN (12, 1, 2) THEN 'Winter'
+                                    WHEN EXTRACT(MONTH FROM played_at) IN (3, 4, 5) THEN 'Spring'
+                                    WHEN EXTRACT(MONTH FROM played_at) IN (6, 7, 8) THEN 'Summer'
+                                    ELSE 'Autumn' END AS season,
+                               track_id,
+                               album_id,
+                               artist_id,
+                               COUNT(*) AS plays,
+                               MAX(played_at) AS last_played_at
+                          FROM play
+                          JOIN track USING (track_id)
+                         WHERE NOT estimated
+                           AND removed_at IS NULL
+                           AND NOT playlist_only
+                         GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked
+         WHERE album_rank <= 2
+           AND artist_rank <= 5) AS limited
+ WHERE position <= 50;

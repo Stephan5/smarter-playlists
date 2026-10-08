@@ -284,6 +284,56 @@ class TestBuiltinPlaylists:
         assert self.fetch(database_name, 'Rising') == {
             'Smarter Playlists/Rising': ['A000000000000004', 'A000000000000001', 'A000000000000005']}
 
+    def test_new_and_unplayed_is_recent_tracks_without_plays(self, database_name, run_import):
+        now = datetime.datetime.now(UTC)
+        days_ago = lambda days: now - datetime.timedelta(days=days)
+        run_import(make_track(track_id='A000000000000001', album_id='C000000000000001', play_count=0,
+                              added_at=days_ago(30)),
+                   make_track(track_id='A000000000000002', album_id='C000000000000002', play_count=0,
+                              added_at=days_ago(3)),
+                   make_track(track_id='A000000000000003', album_id='C000000000000003', play_count=1,
+                              added_at=days_ago(3)),
+                   make_track(track_id='A000000000000004', album_id='C000000000000004', play_count=0,
+                              added_at=days_ago(90)))
+
+        assert self.fetch(database_name, 'New and Unplayed') == {
+            'Smarter Playlists/New and Unplayed': ['A000000000000002', 'A000000000000001']}
+
+    def test_time_of_day_playlists_are_what_is_played_at_each_time(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
+        now = datetime.datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+        hour = lambda hour, days_ago=1: (now - datetime.timedelta(days=days_ago)).replace(hour=hour)
+        plays({1: [hour(5), hour(11), hour(8, 2)],
+               2: [hour(12), hour(16)],
+               3: [hour(17), hour(21)],
+               4: [hour(22), hour(4)],
+               5: [hour(23, 400)],  # over a year ago
+               6: [hour(9)]})
+        query("UPDATE play SET estimated = TRUE WHERE track_id = 'A000000000000006'")
+
+        assert self.fetch(database_name, 'time_of_day') == {
+            'Smarter Playlists/Time of Day/Morning': ['A000000000000001'],
+            'Smarter Playlists/Time of Day/Afternoon': ['A000000000000002'],
+            'Smarter Playlists/Time of Day/Evening': ['A000000000000003'],
+            'Smarter Playlists/Time of Day/Late Night': ['A000000000000004'],
+        }
+
+    def test_seasons_are_what_is_played_in_each_season_of_any_year(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
+        plays({1: [at(2024, 12, 25), at(2026, 1, 5), at(2026, 2, 28)],
+               2: [at(2025, 3, 1), at(2026, 5, 31)],
+               3: [at(2025, 6, 1), at(2026, 8, 31)],
+               4: [at(2025, 9, 1), at(2026, 11, 30)],
+               5: [at(2025, 6, 15)]})
+        query("UPDATE play SET estimated = TRUE WHERE track_id = 'A000000000000005'")
+
+        assert self.fetch(database_name, 'seasons') == {
+            'Smarter Playlists/Seasons/Winter': ['A000000000000001'],
+            'Smarter Playlists/Seasons/Spring': ['A000000000000002'],
+            'Smarter Playlists/Seasons/Summer': ['A000000000000003'],
+            'Smarter Playlists/Seasons/Autumn': ['A000000000000004'],
+        }
+
     def test_top_artists_are_playlists_of_their_top_tracks(self, database_name, run_import):
         big = [make_track(track_id='A1{0:014X}'.format(n), artist_id='B000000000000BIG', artist_name='Big',
                           album_id='C000000000000BIG', play_count=100 + n) for n in range(30)]
