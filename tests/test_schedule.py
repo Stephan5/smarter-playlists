@@ -57,6 +57,16 @@ def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
     assert launchctl.calls == [['bootstrap', schedule.domain(), str(schedule.agent_path())]]
 
 
+def test_the_standalone_executable_is_run_directly(home, launchctl, monkeypatch):
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(sys, 'executable', '/usr/local/bin/smarter-playlists')
+
+    schedule.install(2, backup_dir='/backups')
+
+    assert installed_agent(home)['ProgramArguments'] == [
+        '/usr/local/bin/smarter-playlists', 'run', '--scheduled', '--backup-dir', '/backups']
+
+
 @pytest.mark.skipif(not shutil.which('plutil'), reason='plutil is only on macOS')
 def test_agent_is_a_valid_launchd_plist(home, launchctl):
     schedule.install(0.5)

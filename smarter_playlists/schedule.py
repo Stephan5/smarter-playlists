@@ -18,7 +18,11 @@ def log_path():
 
 def agent(every_hours, backup_dir=None):
     """A launchd agent that imports the library and exports playlists every few hours, and when you log in."""
-    arguments = [sys.executable, '-m', 'smarter_playlists', 'run', '--scheduled']
+    if getattr(sys, 'frozen', False):
+        # The standalone executable is the program itself, not a Python to run the package with
+        arguments = [sys.executable, 'run', '--scheduled']
+    else:
+        arguments = [sys.executable, '-m', 'smarter_playlists', 'run', '--scheduled']
     if backup_dir:
         arguments += ['--backup-dir', str(pathlib.Path(backup_dir).resolve())]
     definition = {
