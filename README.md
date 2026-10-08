@@ -246,6 +246,15 @@ make binary    # Build standalone executable (macOS only)
 make clean     # Remove venv, build artifacts, and cache
 ```
 
+### Releasing
+
+Pushing a tag that matches the version in `pyproject.toml` builds the executable on macOS and attaches it to a GitHub release (see [`release.yml`](.github/workflows/release.yml)):
+
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
+
 ## Tests
 
 The tests need Postgres installed (`initdb` or `pg_config` on the `PATH`) but not running: they start their own temporary server in `/tmp`, so they never touch your database or Music library. They fake the Music library and app, so they run on Linux too.
