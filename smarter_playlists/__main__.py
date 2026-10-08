@@ -191,6 +191,16 @@ def run(args):
             except playlists.ExportFailed as failure:
                 record.playlists_changed, record.playlists_failed = failure.changed, failure.failed
                 raise
+        warn_if_estimates_rising(args, record)
+
+
+def warn_if_estimates_rising(args, record):
+    """A rise means imports are too far apart, e.g. a run was missed, which makes the play history rougher."""
+    warning = history.estimated_rise_warning(record)
+    if warning:
+        logging.warning("%s", warning)
+        if args.scheduled:
+            schedule.notify(warning, "Play history is getting rougher")
 
 
 def warn_if_stale(args):

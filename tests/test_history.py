@@ -4,6 +4,7 @@ import subprocess
 
 import pytest
 
+from conftest import make_track
 from smarter_playlists import history, schedule
 
 UTC = datetime.timezone.utc
@@ -38,6 +39,54 @@ def test_records_why_a_run_failed(database_name, query):
 def test_a_run_is_recorded_as_soon_as_it_starts(database_name, query):
     with history.recorded(True, False, database_name):
         assert runs(query) == [(True, False, False, None, None, None, None, None)]
+
+
+@pytest.fixture
+def plays(query, run_import):
+    """Records plays for a track, some of them estimated."""
+    run_import(make_track())
+
+    def record(real, estimated):
+        for n in range(real + estimated):
+            query("INSERT INTO play (track_id, played_at, estimated) VALUES ('A000000000000001', %s, %s)",
+                  [datetime.datetime(2026, 1, 1, tzinfo=UTC) + datetime.timedelta(days=n), n >= real])
+    return record
+
+
+class TestEstimatedRiseWarning:
+
+    def test_nothing_without_plays(self, database_name):
+        assert history.estimated_rise_warning(history.Run(plays_recorded=0, plays_estimated=0), database_name) is None
+
+    def test_nothing_if_the_run_stopped_before_importing(self, database_name, plays):
+        plays(real=3, estimated=1)
+        assert history.estimated_rise_warning(history.Run(), database_name) is None
+
+    def test_nothing_if_every_play_is_new(self, database_name, plays):
+        # The first import, with nothing to compare to
+        plays(real=3, estimated=1)
+        assert history.estimated_rise_warning(history.Run(plays_recorded=4, plays_estimated=1), database_name) is None
+
+    def test_nothing_when_the_share_holds(self, database_name, plays):
+        # 1 of 10 before, and the 10 new plays are 1 estimated: 2 of 20
+        plays(real=18, estimated=2)
+        assert history.estimated_rise_warning(history.Run(plays_recorded=10, plays_estimated=1), database_name) is None
+
+    def test_nothing_when_the_share_falls(self, database_name, plays):
+        # 10 of 20 before, and none of the 20 new plays are estimated: 10 of 40
+        plays(real=30, estimated=10)
+        assert history.estimated_rise_warning(history.Run(plays_recorded=20, plays_estimated=0), database_name) is None
+
+    def test_nothing_for_a_small_rise(self, database_name, plays):
+        # 20 of 1000 before, and 30 of 1010 after
+        plays(real=980, estimated=30)
+        assert history.estimated_rise_warning(history.Run(plays_recorded=10, plays_estimated=10), database_name) is None
+
+    def test_says_when_the_share_rises(self, database_name, plays):
+        # 10 of 100 before, and 40 of 130 after
+        plays(real=90, estimated=40)
+        assert history.estimated_rise_warning(history.Run(plays_recorded=30, plays_estimated=30), database_name) == (
+            "Estimated plays rose from 10.0% to 30.8% of all plays. Imports may be too far apart")
 
 
 @pytest.mark.parametrize('error, described', [
@@ -84,6 +133,12 @@ class TestSummary:
 
         assert summary() == ["Last run, scheduled at {0}, recorded 3 new plays (1 estimated) and changed 2 playlists"
                              .format(self.local(18))]
+
+    def test_last_run_shows_the_share_of_plays_estimated(self, summary, query, plays):
+        plays(real=7, estimated=1)
+        self.add_run(query, self.at(18))
+
+        assert summary()[-1] == "12.5% of all plays are estimated"
 
     def test_last_run_failed(self, summary, query):
         self.add_run(query, self.at(18))

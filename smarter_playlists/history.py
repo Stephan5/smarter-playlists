@@ -12,6 +12,9 @@ from .library import plural
 # How long without a successful run before it's worth saying so
 STALE_AFTER = datetime.timedelta(hours=24)
 
+# How much a run can raise the share of estimated plays before it's worth saying so (a fraction, not a percentage)
+ESTIMATED_RISE = 0.01
+
 
 @dataclasses.dataclass
 class Run:
@@ -98,6 +101,9 @@ def log_summary(database_name=database.DATABASE):
     elif error is None:
         logging.info("%s recorded %s (%d estimated) and %s %s", run, plural(plays, 'new play'), estimated,
                      "would have changed" if dry_run else "changed", plural(changed, 'playlist'))
+        share = estimated_totals(database_name)
+        if share:
+            logging.info("%s of all plays are estimated", percentage(share[1] / share[0]))
         return
     else:
         logging.info("%s failed: %s", run, error)
@@ -135,6 +141,33 @@ def stale_warning(database_name=database.DATABASE, now=None):
     hours = int(age.total_seconds() // 3600)
     ago = plural(hours, 'hour') if hours < 48 else plural(age.days, 'day')
     return "No successful run since {0}, {1} ago".format(local_time(last_success), ago)
+
+
+def estimated_totals(database_name):
+    """How many plays there are, and how many of them are estimated. Nothing if there are none."""
+    with database.connect(database_name) as db:
+        total, estimated = db.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE estimated) FROM play").fetchone()
+    return (total, estimated) if total else None
+
+
+def estimated_rise_warning(run, database_name=database.DATABASE):
+    """Says so if the run raised the share of plays that are estimated, which happens when imports are too far apart to
+    keep up with your listening. The share falls as real plays build up, and the run's own plays are the only ones that
+    changed it, so the share before is the totals without them."""
+    totals = estimated_totals(database_name)
+    if not totals or not run.plays_recorded or totals[0] == run.plays_recorded:
+        return None
+    total, estimated = totals
+    before = (estimated - run.plays_estimated) / (total - run.plays_recorded)
+    now = estimated / total
+    if now - before <= ESTIMATED_RISE:
+        return None
+    return "Estimated plays rose from {0} to {1} of all plays. Imports may be too far apart".format(
+        percentage(before), percentage(now))
+
+
+def percentage(share):
+    return '{0:.1f}%'.format(share * 100)
 
 
 def local_time(time):

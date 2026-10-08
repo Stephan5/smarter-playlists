@@ -47,6 +47,8 @@ def calls(monkeypatch):
     monkeypatch.setattr(history, 'log_summary', record('summary'))
     recorded.stale = None
     monkeypatch.setattr(history, 'stale_warning', lambda: recorded.stale)
+    recorded.rise = None
+    monkeypatch.setattr(history, 'estimated_rise_warning', lambda run: recorded.rise)
     monkeypatch.setattr(library, 'import_library', record('import', (3, 1)))
     monkeypatch.setattr(playlists, 'export_playlists', record('export', 2))
     monkeypatch.setattr(schedule, 'install', record('install'))
@@ -154,6 +156,31 @@ def test_runs_dont_warn_when_runs_are_recent(calls, monkeypatch, caplog):
     cli.main(['run', '--scheduled'])
 
     assert not [record for record in caplog.records if record.levelname == 'WARNING']
+
+
+@pytest.mark.parametrize('arguments, notified', [
+    (['run', '--scheduled'], [("Estimated plays rose", "Play history is getting rougher")]),
+    (['run'], []),
+])
+def test_runs_warn_when_estimated_plays_rise(calls, monkeypatch, caplog, arguments, notified):
+    calls.rise = "Estimated plays rose"
+    notifications = []
+    monkeypatch.setattr(schedule, 'notify', lambda message, subtitle: notifications.append((message, subtitle)))
+
+    cli.main(arguments)
+
+    assert notifications == notified
+    assert "Estimated plays rose" in caplog.messages
+
+
+def test_runs_that_fail_dont_check_estimated_plays(calls, monkeypatch, caplog):
+    calls.rise = "Estimated plays rose"
+    monkeypatch.setattr(library, 'import_library', lambda *args: 1 / 0)
+
+    with pytest.raises(SystemExit):
+        cli.main(['run'])
+
+    assert "Estimated plays rose" not in caplog.messages
 
 
 def test_schedule_status_warns_when_there_has_been_no_successful_run_for_a_while(calls, caplog):
