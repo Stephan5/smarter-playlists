@@ -16,6 +16,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import threading
 
 import pytest
 
@@ -132,10 +133,23 @@ def test_scheduled_runs_use_commands_the_executable_accepts(run, binary, environ
     assert pathlib.Path(command[0]).resolve() == binary
     assert command[1:3] == ['run', '--scheduled']
 
-    # Run it, as a dry run so that it never changes your playlists. With a Music library that completes. Without one
-    # it stops after reading the library, which is later than it would if it didn't understand its arguments.
-    process = run(command=command + ['--dry-run'], env={**environment, **agent.get('EnvironmentVariables', {})},
-                  check=False)
-    assert 'Run started' in process.output
-    assert 'invalid choice' not in process.output
-    assert 'usage:' not in process.output
+    # stop once we get to reading music library step.
+    process = subprocess.Popen(command + ['--dry-run'], env={**environment, **agent.get('EnvironmentVariables', {})},
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    timer = threading.Timer(TIMEOUT_SECONDS, process.kill)
+    timer.start()
+    try:
+        output = ''
+        for line in process.stdout:
+            output += line
+            if 'Reading the Music library' in line:
+                break
+    finally:
+        timer.cancel()
+        process.kill()
+        process.wait()
+        run('db', 'stop', check=False)
+
+    assert 'Run started' in output
+    assert 'invalid choice' not in output
+    assert 'usage:' not in output
