@@ -5,7 +5,7 @@ a = Analysis(
     ['run_smarter_playlists.py'],
     pathex=[],
     binaries=[],
-    datas=[('smarter_playlists/*.sql', 'smarter_playlists'), ('smarter_playlists/migrations/*.sql', 'smarter_playlists/migrations'), ('smarter_playlists/*.js', 'smarter_playlists')],
+    datas=[('smarter_playlists/migrations/*.sql', 'smarter_playlists/migrations'), ('smarter_playlists/*.js', 'smarter_playlists')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

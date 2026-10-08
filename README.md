@@ -15,7 +15,6 @@ There are two ways to install it. Either way you need macOS with the Music app, 
 | Needs                                                 | Apple silicon Mac. No Python                     | Python 3.14+. Any Mac                     |
 | Start up                                              | About 6 seconds for every command                | About 0.3 seconds                         |
 | Scheduling                                            | Yes                                              | Yes                                       |
-| Import from the old version, reset built-in playlists | Needs a clone's `scripts` and `playlists.sql`    | Yes                                       |
 | Updating                                              | Download the new release                         | `git pull`, then `pip install -e .` again |
 
 Both can [run on a schedule](#running-on-a-schedule). The clone is the better choice if you can use it, as it starts much faster. The binary is for if you'd rather not install Python.
@@ -88,7 +87,7 @@ Playlists from months before the new date stay in Music, as playlists are never 
 
 ## Playlists
 
-Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`playlists.sql`](smarter_playlists/playlists.sql)), all in a "Smarter Playlists" folder:
+Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`R__Playlists.sql`](smarter_playlists/migrations/R__Playlists.sql)), all in a "Smarter Playlists" folder:
 
 | View                     | Playlists                                                                                                                                                                                                                    |
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -130,7 +129,7 @@ A view needs a `track_id` column, and the playlist follows its `position` column
 
 A `folder` column puts playlists in a folder, with `/` between nested folders, e.g. `'Smarter Playlists/2026'`. Without one, playlists go at the top level.
 
-For example, to add a playlist of tracks you keep skipping:
+To add your own, create a view in the `playlist` schema with `smarter-playlists psql`, which works the same for the binary and a clone, or put the SQL in a file and run `smarter-playlists psql -f my_views.sql`. For example, a playlist of tracks you keep skipping:
 
 ```sql
 CREATE VIEW playlist."Skipped" AS
@@ -138,17 +137,21 @@ SELECT track_id,
        ROW_NUMBER() OVER (ORDER BY skip_count DESC) AS position
   FROM track
  WHERE skip_count >= 5
+   AND played_at::date >= (SELECT history_start FROM setting)
    AND removed_at IS NULL
  ORDER BY position
  LIMIT 50;
 ```
 
-Edit or drop the built-in views to change them. Dropping a view doesn't delete its playlists from Music.
+Build your views from the tables (`play`, `track`, `artist` and `album`) rather than from other views in the `playlist` schema. To ignore plays before the [history start](#history-start), add `AND played_at::date >= (SELECT history_start FROM setting)`.
 
-To reset the built-in views, for example after updating Smarter Playlists, re-run `playlists.sql`. This drops and recreates the whole `playlist` schema, so any views you've added to it are lost:
+You can edit or drop the built-in views, but not for long. They're recreated whenever [`R__Playlists.sql`](smarter_playlists/migrations/R__Playlists.sql) changes, e.g. after updating Smarter Playlists (see [Schema changes](#schema-changes)), so edits are lost and dropped ones come back. To change one for good, copy it under a new name. Views you've added are kept, but one that selects from a built-in view stops that recreating them, as Postgres won't drop a view something else uses, and then every command refuses to run until you drop it. Dropping a view doesn't delete its playlists from Music.
+
+To reset the built-in views now, forget that the file was applied and migrate:
 
 ```bash
-smarter-playlists psql -f smarter_playlists/playlists.sql
+smarter-playlists psql -c "DELETE FROM schema_migration WHERE version IS NULL"
+smarter-playlists migrate
 ```
 
 ### Export
@@ -263,7 +266,7 @@ The database only works with the major version of Postgres that made it, e.g. 18
 
 ### Schema changes
 
-The database schema is built up by the files in [`smarter_playlists/migrations`](smarter_playlists/migrations), named like `02__AddSomething.sql`. `setup` applies them all, and each one is recorded in the `schema_migration` table once applied.
+The database schema is built up by the files in [`smarter_playlists/migrations`](smarter_playlists/migrations), named like `02__AddSomething.sql`. `setup` applies them all, and each one is recorded in the `schema_migration` table once applied, with a checksum of its SQL. A numbered migration that no longer matches its checksum has been edited since it was applied, and every command refuses to run until that's put right.
 
 After updating Smarter Playlists, `import` and `run` apply any new ones, right after backing up the database. To do it without importing, or to see that it's up to date:
 
@@ -271,9 +274,11 @@ After updating Smarter Playlists, `import` and `run` apply any new ones, right a
 ./venv/bin/smarter-playlists migrate
 ```
 
+Files named like `R__Something.sql` are repeatable migrations. They're applied after the numbered ones, and again whenever their contents change, and recorded with a checksum in the same `schema_migration` table, with no version. The built-in playlist views are one: it drops and recreates only the views it makes.
+
 Other commands refuse to run on an out of date database, and on one made by a newer version than the one installed. Each migration is applied in a transaction of its own, so one that fails changes nothing, and the ones before it are kept.
 
-To change the schema, add a migration with the next number rather than editing one that's been released. It's plain SQL, and doesn't need to touch the `playlist` views, which are only reset by re-running `playlists.sql`.
+To change the schema, add a migration with the next number rather than editing one that's been released. It's plain SQL, and doesn't need to touch the `playlist` views, which are reset by editing `R__Playlists.sql`.
 
 ## Development
 

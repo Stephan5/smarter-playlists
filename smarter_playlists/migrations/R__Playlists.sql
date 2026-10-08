@@ -1,20 +1,15 @@
--- Playlists created by `smarter-playlists setup`. Every view in the playlist schema is exported to Music.
---
--- A view needs a track_id column, and is ordered by its position column if it has one. It's exported as a playlist
--- named after the view, or, if it has a playlist column, as one playlist for each distinct value of that column.
--- A folder column puts playlists in a folder, with / between nested folders, e.g. 'Smarter Playlists/2026'.
---
--- Views built from plays ignore any before the history_start setting, the date real play data starts from. Change it
--- with `UPDATE setting SET history_start = DATE '2026-10-06'`. Months and years follow the database's time zone. It's
--- compared as a date rather than a timestamp, which would be fixed to the time zone the view was created in and could
--- disagree with how plays are grouped.
+-- The built-in playlists, reapplied whenever this file changes. Only the views made here are dropped and recreated, so
+-- views you've added to the playlist schema are kept. Plays before the history_start setting are ignored.
+
+CREATE SCHEMA IF NOT EXISTS playlist;
+
+DROP VIEW IF EXISTS playlist.monthly, playlist.yearly, playlist."Last Month", playlist."Rising", playlist.top_artists,
+                    playlist."All-Time Favourites", playlist."Forgotten Favourites", playlist."New and Unplayed",
+                    playlist.time_of_day, playlist.seasons;
 
 -- The most played tracks of each month since history_start, named like "October 2026", with at most 2 tracks from any
--- album and 5 from any artist. A new playlist appears each month, in a folder for its year.
-
-DROP SCHEMA IF EXISTS playlist CASCADE;
-CREATE SCHEMA playlist;
-
+-- album and 5 from any artist. A new playlist appears each month, in a folder for its year. Months and years follow the
+-- database's time zone, so history_start is compared as a date rather than a timestamp.
 CREATE VIEW playlist.monthly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
        TO_CHAR(month, 'FMMonth YYYY') AS playlist,

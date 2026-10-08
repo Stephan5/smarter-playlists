@@ -76,6 +76,7 @@ def test_only_optional_values_are_nullable(database_name, query):
         ('run', 'playlists_changed'),
         ('run', 'playlists_failed'),
         ('run', 'error'),
+        ('schema_migration', 'version'),
         ('track', 'year'),
         ('track', 'bpm'),
         ('track', 'last_played_at'),
@@ -99,7 +100,7 @@ class TestMigrations:
         return add
 
     def applied(self, query):
-        return [name for (name,) in query("SELECT name FROM schema_migration ORDER BY version")]
+        return [name for (name,) in query("SELECT name FROM schema_migration WHERE version IS NOT NULL ORDER BY version")]
 
     def test_set_up_records_the_migrations(self, database_name, query):
         assert self.applied(query) == [name for _, name, _ in database.migrations()]
@@ -171,11 +172,23 @@ class TestMigrations:
         query("DROP TABLE schema_migration, setting CASCADE")
         newer(**{'03__AddNote': "CREATE TABLE note (note_id INT)"})
 
-        assert database.migrate(database_name) == 2
+        # Along with the repeatable ones, which weren't recorded either
+        assert database.migrate(database_name) == 3
         assert self.applied(query) == ['01__InitialSchema', '02__AddHistoryStart', '03__AddNote']
 
+    def test_a_migration_changed_since_it_was_applied_is_refused(self, database_name, newer, monkeypatch):
+        (name,) = newer(**{'03__AddNote': "CREATE TABLE note (note_id INT)"})
+        database.migrate(database_name)
+        real = database.migrations()
+        changed = [(v, n, sql + ' -- edited' if n == name else sql) for v, n, sql in real]
+        monkeypatch.setattr(database, 'migrations', lambda: changed)
+
+        with database.connect(database_name) as db:
+            with pytest.raises(SystemExit, match=name + ' has changed since it was applied'):
+                database.require_set_up(db)
+
     def test_a_database_from_a_newer_version_is_refused(self, database_name, query):
-        query("INSERT INTO schema_migration (version, name) VALUES (99, '99__FromTheFuture')")
+        query("INSERT INTO schema_migration (version, name, checksum) VALUES (99, '99__FromTheFuture', '')")
 
         with pytest.raises(SystemExit, match='migration 99, which this version .* doesn.t know about'):
             database.migrate(database_name)
@@ -183,3 +196,69 @@ class TestMigrations:
     def test_migrating_a_database_that_is_not_set_up(self, empty_database):
         with pytest.raises(SystemExit, match="isn't set up yet"):
             database.migrate(empty_database)
+
+
+class TestRepeatableMigrations:
+
+    @pytest.fixture
+    def repeatable(self, monkeypatch):
+        """Replaces the repeatable migrations with one named R__Note, whose SQL can be changed."""
+        sql = {'text': "CREATE TABLE IF NOT EXISTS note (note_id INT); INSERT INTO note VALUES (1)"}
+        monkeypatch.setattr(database, 'repeatables', lambda: [('R__Note', sql['text'])])
+        return sql
+
+    def test_are_found_by_name(self, tmp_path, monkeypatch):
+        directory = tmp_path / 'migrations'
+        directory.mkdir()
+        for name in ('R__Two.sql', 'R__One.sql', '01__One.sql', 'R_Bad.sql', 'R__Other.txt'):
+            (directory / name).write_text('-- ' + name)
+        monkeypatch.setattr(database.importlib.resources, 'files', lambda package: tmp_path)
+
+        assert database.repeatables() == [('R__One', '-- R__One.sql'), ('R__Two', '-- R__Two.sql')]
+
+    def test_the_built_in_playlists_are_one(self, database_name, query):
+        assert [name for name, _ in database.repeatables()] == ['R__Playlists']
+        assert query("SELECT name, version FROM schema_migration WHERE version IS NULL") == [('R__Playlists', None)]
+
+    def test_are_applied_when_new_or_changed_and_not_otherwise(self, database_name, query, repeatable, caplog):
+        caplog.set_level('INFO')
+
+        assert database.migrate(database_name) == 1
+        assert database.migrate(database_name) == 0
+        repeatable['text'] += "; INSERT INTO note VALUES (2)"
+        assert database.migrate(database_name) == 1
+        assert database.migrate(database_name) == 0
+
+        assert query("SELECT note_id FROM note ORDER BY 1") == [(1,), (1,), (2,)]
+        assert caplog.messages.count('Applied repeatable migration R__Note') == 2
+
+    def test_calls_before_only_if_one_is_pending(self, database_name, repeatable):
+        calls = []
+        database.migrate(database_name, before=lambda: calls.append('before'))
+        database.migrate(database_name, before=lambda: calls.append('before'))
+        assert calls == ['before']
+
+    def test_commands_refuse_to_run_until_they_are_applied(self, database_name, repeatable):
+        with database.connect(database_name) as db:
+            with pytest.raises(SystemExit, match='needs migrating'):
+                database.require_set_up(db)
+
+    def test_a_failed_one_is_undone_and_tried_again(self, database_name, query, repeatable):
+        repeatable['text'] = "CREATE TABLE half (id INT); SELECT 1 / 0"
+
+        with pytest.raises(Exception, match='division by zero'):
+            database.migrate(database_name)
+
+        assert query("SELECT to_regclass('half')") == [(None,)]
+        assert query("SELECT count(*) FROM schema_migration WHERE name = 'R__Note'") == [(0,)]
+
+    def test_changed_built_in_playlists_are_recreated_but_added_ones_kept(self, database_name, query):
+        query("CREATE VIEW playlist.mine AS SELECT track_id FROM track")
+        query("DROP VIEW playlist.monthly")
+        query("UPDATE schema_migration SET checksum = 'old' WHERE version IS NULL")
+
+        assert database.migrate(database_name) == 1
+
+        views = {view for (view,) in query("SELECT table_name FROM information_schema.views "
+                                           "WHERE table_schema = 'playlist'")}
+        assert {'mine', 'monthly', 'yearly'} <= views
