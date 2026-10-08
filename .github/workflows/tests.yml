@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
   pull_request:
+  # So a release can run them first
+  workflow_call:
 
 permissions:
   contents: read

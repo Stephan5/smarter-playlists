@@ -9,7 +9,12 @@ permissions:
   contents: write
 
 jobs:
+  # Nothing is released unless the tests pass on the tagged commit
+  test:
+    uses: ./.github/workflows/tests.yml
+
   release:
+    needs: test
     # The executable reads the Music library and talks to the Music app, so it can only be built on macOS. Only for
     # Apple silicon (arm64), which is what macos-latest is. The Intel runners would need a build of their own.
     runs-on: macos-latest
