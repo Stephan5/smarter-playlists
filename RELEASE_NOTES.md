@@ -2,6 +2,43 @@
 
 Newest first. A release's description on GitHub is its section here.
 
+## 1.1.0
+
+macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
+
+### Added
+
+* **A history start date.** Plays from before you started importing are only estimates, so the playlist views and `stats` now ignore any before the `history_start` date in the new `setting` table. It's the day `setup` ran, and you can change it, e.g. `smarter-playlists psql -c "UPDATE setting SET history_start = DATE '2026-10-06'"`. It applies to `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day` and `seasons`. `monthly` and `yearly` start from it, instead of the October 2026 and 2026 they were fixed to.
+* **Repeatable migrations.** A file named like `R__Something.sql` in the migrations folder is applied after the numbered ones, and again whenever it changes. The built-in playlist views are now one, `R__Playlists.sql`, replacing `playlists.sql`, so they're brought up to date by `migrate` (and `import` and `run`) after an update, rather than by re-running a file.
+
+### Changed
+
+* Updating no longer needs `playlists.sql` to be re-run, and the executable no longer needs a clone to reset the built-in views. Only the built-in views are recreated, so views you've added to the `playlist` schema are kept. Changes you've made to the built-in ones are lost whenever the file changes. A view of yours that selects from a built-in view stops them being recreated, so build yours from the tables.
+* Migrations are recorded with a checksum, in the one `schema_migration` table. If a numbered migration has been edited since it was applied, commands refuse to run.
+
+### Upgrading from 1.0.x
+
+The `schema_migration` table has a new shape, which `migrate` can't change for you. Back up first, then run this once, then migrate and set your history start:
+
+```bash
+smarter-playlists backup
+smarter-playlists psql <<'SQL'
+BEGIN;
+ALTER TABLE schema_migration DROP CONSTRAINT schema_migration_pkey;
+ALTER TABLE schema_migration ADD PRIMARY KEY (name);
+ALTER TABLE schema_migration ALTER COLUMN version DROP NOT NULL;
+ALTER TABLE schema_migration ADD UNIQUE (version);
+ALTER TABLE schema_migration ADD COLUMN checksum TEXT;
+UPDATE schema_migration SET checksum = '20a75e7f' WHERE version = 1;
+ALTER TABLE schema_migration ALTER COLUMN checksum SET NOT NULL;
+COMMIT;
+SQL
+smarter-playlists migrate
+smarter-playlists psql -c "UPDATE setting SET history_start = DATE '2026-10-06'"
+```
+
+Use your own date for the last step. A new database needs none of this.
+
 ## 1.0.1
 
 macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
