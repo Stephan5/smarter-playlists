@@ -3,8 +3,13 @@
 [![Tests](https://github.com/Stephan5/smarter-playlists/actions/workflows/tests.yml/badge.svg)](https://github.com/Stephan5/smarter-playlists/actions/workflows/tests.yml)
 
 Smarter Playlists lets you get the playlists you want by collecting your Apple Music library data over time, building a real play history, and writing playlists in SQL.
-
 It imports your Music library into PostgreSQL, keeps a history of every play, and exports SQL views back out to playlists in the Music app, including a playlist of your most played tracks for every month and year.
+
+Apple Music only store two pieces of play information about tracks in your library: the total play count and the last played time. 
+This isn't enough to create time-based playlists, and so creating a playlist like 'Most Played October 2026' is impossible.
+
+Smarter Playlists fixes this by snapshotting this limited play data for every track in your library on a schedule, and builds it's own history of which tracks where played when.
+This enables it to create temporally concerned playlists like those for months, years, seasons, days of the week or even times of day.
 
 ## Setup
 
@@ -12,7 +17,7 @@ There are two ways to install it. Either way you need macOS with the Music app, 
 
 |                                                       | Binary                                           | Clone                                     |
 |-------------------------------------------------------|--------------------------------------------------|-------------------------------------------|
-| Needs                                                 | Apple silicon Mac. No Python                     | Python 3.14+. Any Mac                     |
+| Needs                                                 | Apple Silicon Mac. No Python                     | Python 3.14+. Any Mac                     |
 | Start up                                              | About 6 seconds for every command                | About 0.3 seconds                         |
 | Scheduling                                            | Yes                                              | Yes                                       |
 | Updating                                              | Download the new release                         | `git pull`, then `pip install -e .` again |
