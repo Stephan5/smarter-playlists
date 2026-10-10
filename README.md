@@ -5,7 +5,8 @@
 Smarter Playlists lets you get the playlists you want by collecting your Apple Music library data over time, building a real play history, and writing playlists in SQL.
 It imports your Music library into PostgreSQL, keeps a history of every play, and exports SQL views back out to playlists in the Music app, including a playlist of your most played tracks for every month and year.
 
-Apple Music only store two pieces of play information about tracks in your library: the total play count and the last played time. 
+## Why
+Apple Music only stores two pieces of play information about tracks in your library: the total play count and the last played time. 
 This isn't enough to create time-based playlists, and so creating a playlist like 'Most Played October 2026' is impossible.
 
 Smarter Playlists fixes this by snapshotting this limited play data for every track in your library on a schedule, and builds it's own history of which tracks where played when.
