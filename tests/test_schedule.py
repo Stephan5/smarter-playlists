@@ -33,7 +33,7 @@ def launchctl(monkeypatch):
 
 
 def installed_agent(home):
-    with open(home / 'Library' / 'LaunchAgents' / 'local.smarter-playlists.plist', 'rb') as file:
+    with open(home / 'Library' / 'LaunchAgents' / 'io.github.stephan5.smarter-playlists.plist', 'rb') as file:
         return plistlib.load(file)
 
 
@@ -43,9 +43,9 @@ def test_install_writes_and_loads_an_agent(home, launchctl, monkeypatch):
 
     schedule.install(2)
 
-    log = str(home / 'Library' / 'Logs' / 'smarter-playlists.log')
+    log = str(home / 'Library' / 'Logs' / 'io.github.stephan5.smarter-playlists.log')
     assert installed_agent(home) == {
-        'Label': 'local.smarter-playlists',
+        'Label': 'io.github.stephan5.smarter-playlists',
         'ProgramArguments': [sys.executable, '-m', 'smarter_playlists', 'run', '--scheduled'],
         'StartInterval': 7200,
         'RunAtLoad': True,
@@ -61,7 +61,7 @@ def test_dry_run_shows_the_agent_without_installing_it(home, launchctl, capsys):
     schedule.install(3, backup_dir='/backups', dry_run=True)
 
     shown = plistlib.loads(capsys.readouterr().out.encode())
-    assert shown['Label'] == 'local.smarter-playlists'
+    assert shown['Label'] == 'io.github.stephan5.smarter-playlists'
     assert shown['StartInterval'] == 3 * 60 * 60
     assert shown['ProgramArguments'][-3:] == ['--scheduled', '--backup-dir', '/backups']
     assert not schedule.agent_path().exists()
@@ -137,7 +137,7 @@ def test_status(home, launchctl, caplog):
     schedule.status()
 
     messages = [record.getMessage() for record in caplog.records if 'Scheduled to run' not in record.getMessage()]
-    log = home / 'Library' / 'Logs' / 'smarter-playlists.log'
+    log = home / 'Library' / 'Logs' / 'io.github.stephan5.smarter-playlists.log'
     assert messages == [
         'Not scheduled',
         'Scheduled every 3 hours. Logging to {0}'.format(log),

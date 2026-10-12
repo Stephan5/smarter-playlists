@@ -199,11 +199,11 @@ It also runs straight away, so you can check it works:
 
 ```bash
 smarter-playlists schedule status
-tail -f ~/Library/Logs/smarter-playlists.log
+tail -f ~/Library/Logs/io.github.stephan5.smarter-playlists.log
 ```
 
 * Use `--every` to change how many hours apart runs are, and `--backup-dir` to keep backups somewhere else. `--dry-run` shows the launchd agent that would be installed, without installing it.
-* It runs as a launchd agent (`~/Library/LaunchAgents/local.smarter-playlists.plist`), so only while you're logged in.
+* It runs as a launchd agent (`~/Library/LaunchAgents/io.github.stephan5.smarter-playlists.plist`), so only while you're logged in.
 * The first scheduled run may ask again for permission to control Music, this time for Python. If the log shows "Not authorized to send Apple events to Music", allow it in System Settings > Privacy & Security > Automation.
 * Your `PATH`, to find the same Postgres, and `SMARTER_PLAYLISTS_HOME`, if set, are saved with the schedule, so run `install` again if they change.
 

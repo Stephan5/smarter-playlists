@@ -5,7 +5,7 @@ import plistlib
 import subprocess
 import sys
 
-LABEL = 'local.smarter-playlists'
+LABEL = 'io.github.stephan5.smarter-playlists'
 
 
 def agent_path():
@@ -13,7 +13,7 @@ def agent_path():
 
 
 def log_path():
-    return pathlib.Path.home() / 'Library' / 'Logs' / 'smarter-playlists.log'
+    return pathlib.Path.home() / 'Library' / 'Logs' / '{0}.log'.format(LABEL)
 
 
 def agent(every_hours, backup_dir=None):
