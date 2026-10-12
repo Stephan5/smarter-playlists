@@ -262,6 +262,7 @@ class TestBuiltinPlaylists:
         }
 
     def test_history_start_applies_to_every_view_built_from_plays(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
         now = datetime.datetime.now(UTC)
         days_ago = lambda *days: [now - datetime.timedelta(days=day) for day in days]
         plays({1: days_ago(2, 3, 4)})
