@@ -5,9 +5,9 @@ CREATE SCHEMA IF NOT EXISTS playlist;
 
 DROP VIEW IF EXISTS playlist.monthly, playlist.yearly, playlist."Last Month", playlist."Rising", playlist.top_artists,
                     playlist."All-Time Favourites", playlist."Forgotten Favourites", playlist."New and Unplayed",
-                    playlist.time_of_day, playlist.seasons;
+                    playlist.time_of_day, playlist.seasons, playlist.days_of_week;
 
--- The most played tracks of each month since history_start, named like "October 2026", with at most 2 tracks from any
+-- The most played tracks of each month since history_start, named like "October 2026", with at most 3 tracks from any
 -- album and 5 from any artist. A new playlist appears each month, in a folder for its year. Months and years follow the
 -- database's time zone, so history_start is compared as a date rather than a timestamp.
 CREATE VIEW playlist.monthly AS
@@ -33,7 +33,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY month, track_id, album_id, artist_id) AS track_plays
-         WHERE album_rank <= 2
+         WHERE album_rank <= 3
            AND artist_rank <= 5) AS ranked
  WHERE position <= 50;
 
@@ -66,7 +66,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
            AND artist_rank <= 10) AS ranked
  WHERE position <= 100;
 
--- The most played tracks of the last 30 days, with at most 2 tracks from any album and 5 from any artist
+-- The most played tracks of the last 30 days, with at most 3 tracks from any album and 5 from any artist
 CREATE VIEW playlist."Last Month" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
@@ -85,13 +85,13 @@ SELECT 'Smarter Playlists' AS folder,
            AND removed_at IS NULL
            AND NOT playlist_only
          GROUP BY track_id, album_id, artist_id) AS track_plays
- WHERE album_rank <= 2
+ WHERE album_rank <= 3
    AND artist_rank <= 5
  ORDER BY position
  LIMIT 50;
 
 -- What you're getting into: tracks played more in the last 30 days than in the 90 days before, at least twice, ordered
--- by how much more. At most 2 tracks from any album and 3 from any artist.
+-- by how much more. At most 3 tracks from any album and 5 from any artist.
 CREATE VIEW playlist."Rising" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
@@ -119,8 +119,8 @@ SELECT 'Smarter Playlists' AS folder,
                  GROUP BY track_id, album_id, artist_id) AS track_plays
          WHERE recent_plays > earlier_plays
            AND recent_plays >= 2) AS rising
- WHERE album_rank <= 2
-   AND artist_rank <= 3
+ WHERE album_rank <= 3
+   AND artist_rank <= 5
  ORDER BY position
  LIMIT 50;
 
@@ -191,7 +191,7 @@ SELECT 'Smarter Playlists' AS folder,
 
 -- What you play at different times of the day over the last year: Morning (5am to noon), Afternoon (noon to 5pm),
 -- Evening (5pm to 10pm) and Late Night (10pm to 5am), by the database's time zone. A playlist for each, with at most
--- 2 tracks from any album and 5 from any artist. Estimated plays are left out, as they have no real time of day.
+-- 3 tracks from any album and 5 from any artist. Estimated plays are left out, as they have no real time of day.
 CREATE VIEW playlist.time_of_day AS
 SELECT 'Smarter Playlists/Time of Day' AS folder,
        period AS playlist,
@@ -225,13 +225,13 @@ SELECT 'Smarter Playlists/Time of Day' AS folder,
                            AND removed_at IS NULL
                            AND NOT playlist_only
                          GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked
-         WHERE album_rank <= 2
+         WHERE album_rank <= 3
            AND artist_rank <= 5) AS limited
  WHERE position <= 50;
 
 -- What you play in each season, across every year: Winter (December to February), Spring (March to May), Summer
 -- (June to August) and Autumn (September to November). For the southern hemisphere, swap the names around. A playlist
--- for each, of up to 50 tracks with at most 2 from any album and 5 from any artist. Estimated plays are left out, as
+-- for each, of up to 50 tracks with at most 3 from any album and 5 from any artist. Estimated plays are left out, as
 -- they aren't at a real time of year.
 CREATE VIEW playlist.seasons AS
 SELECT 'Smarter Playlists/Seasons' AS folder,
@@ -265,6 +265,42 @@ SELECT 'Smarter Playlists/Seasons' AS folder,
                            AND removed_at IS NULL
                            AND NOT playlist_only
                          GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked
-         WHERE album_rank <= 2
+         WHERE album_rank <= 3
+           AND artist_rank <= 5) AS limited
+ WHERE position <= 50;
+
+-- What you play on each day of the week, across every week: a playlist for each of Monday to Sunday, by the database's
+-- time zone, of up to 50 tracks with at most 3 from any album and 5 from any artist. Estimated plays are left out, as
+-- they aren't on a real day.
+CREATE VIEW playlist.days_of_week AS
+SELECT 'Smarter Playlists/Days of the Week' AS folder,
+       day AS playlist,
+       track_id,
+       position
+  FROM (SELECT day,
+               track_id,
+               ROW_NUMBER() OVER (PARTITION BY day ORDER BY plays DESC, last_played_at DESC, track_id) AS position
+          FROM (SELECT day,
+                       track_id,
+                       plays,
+                       last_played_at,
+                       ROW_NUMBER() OVER (PARTITION BY day, album_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS album_rank,
+                       ROW_NUMBER() OVER (PARTITION BY day, artist_id
+                                              ORDER BY plays DESC, last_played_at DESC, track_id) AS artist_rank
+                  FROM (SELECT TO_CHAR(played_at, 'FMDay') AS day,
+                               track_id,
+                               album_id,
+                               artist_id,
+                               COUNT(*) AS plays,
+                               MAX(played_at) AS last_played_at
+                          FROM play
+                          JOIN track USING (track_id)
+                         WHERE played_at::date >= (SELECT history_start FROM setting)
+                           AND NOT estimated
+                           AND removed_at IS NULL
+                           AND NOT playlist_only
+                         GROUP BY 1, track_id, album_id, artist_id) AS track_plays) AS ranked
+         WHERE album_rank <= 3
            AND artist_rank <= 5) AS limited
  WHERE position <= 50;

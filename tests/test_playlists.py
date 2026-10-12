@@ -267,7 +267,7 @@ class TestBuiltinPlaylists:
         plays({1: days_ago(2, 3, 4)})
         query("UPDATE setting SET history_start = %s", [(now - datetime.timedelta(days=1)).date()])
 
-        for view in ['Last Month', 'Rising', 'time_of_day', 'seasons', 'monthly', 'yearly']:
+        for view in ['Last Month', 'Rising', 'time_of_day', 'seasons', 'days_of_week', 'monthly', 'yearly']:
             assert self.fetch(database_name, view) == {}, view
 
     def test_history_start_is_the_day_it_starts_on(self, database_name, plays, query):
@@ -280,7 +280,7 @@ class TestBuiltinPlaylists:
         plays({n: [at(2026, 10, day) for day in range(1, n + 2)] for n in range(1, 5)})
         query("UPDATE track SET album_id = 'C000000000000001'")
 
-        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000004', 'A000000000000003']}
+        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000004', 'A000000000000003', 'A000000000000002']}
 
     def test_last_month_is_the_last_30_days(self, database_name, plays):
         now = datetime.datetime.now(UTC)
@@ -353,6 +353,22 @@ class TestBuiltinPlaylists:
             'Smarter Playlists/Seasons/Summer': ['A000000000000003'],
             'Smarter Playlists/Seasons/Autumn': ['A000000000000004'],
         }
+
+    def test_days_of_week_are_what_is_played_on_each_day_of_any_week(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
+        plays({1: [at(2026, 10, 5), at(2026, 10, 12)],  # Mondays
+              2: [at(2026, 10, 6)],
+              3: [at(2026, 10, 7)],
+              4: [at(2026, 10, 8)],
+              5: [at(2026, 10, 9)],
+              6: [at(2026, 10, 10)],
+              7: [at(2026, 10, 11)],
+              8: [at(2026, 10, 5)]})
+        query("UPDATE play SET estimated = TRUE WHERE track_id = 'A000000000000008'")
+
+        assert self.fetch(database_name, 'days_of_week') == {
+            'Smarter Playlists/Days of the Week/' + day: ['A00000000000000' + str(n)]
+            for n, day in enumerate(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], 1)}
 
     def test_top_artists_are_playlists_of_their_top_tracks(self, database_name, run_import):
         big = [make_track(track_id='A1{0:014X}'.format(n), artist_id='B000000000000BIG', artist_name='Big',

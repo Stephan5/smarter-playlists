@@ -80,7 +80,7 @@ Add `WHERE NOT estimated` to a query to count only the plays that were actually 
 
 ### History start
 
-Plays from before you started importing are only guesses, so the playlist views and `stats` ignore any before the `history_start` date in the `setting` table, which `setup` sets to the day it ran. That covers `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day` and `seasons`. Views built from each track's play count, like `"All-Time Favourites"`, aren't affected, as Music keeps no dates for those plays.
+Plays from before you started importing are only guesses, so the playlist views and `stats` ignore any before the `history_start` date in the `setting` table, which `setup` sets to the day it ran. That covers `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day`, `seasons` and `days_of_week`. Views built from each track's play count, like `"All-Time Favourites"`, aren't affected, as Music keeps no dates for those plays.
 
 To use a different date, e.g. the day your install started recording real plays, change it and export again. The date is compared with the date of each play in the database's time zone. `'-infinity'` ignores nothing:
 
@@ -97,20 +97,24 @@ Every view in the `playlist` schema is exported to Music. `setup` creates these 
 
 | View                     | Playlists                                                                                                                                                                                                                    |
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `monthly`                | The 50 most played tracks of each month since the [history start](#history-start), named like "October 2026", at most 2 per album and 5 per artist. A new one appears each month, in a folder for its year.                                         |
+| `monthly`                | The 50 most played tracks of each month since the [history start](#history-start), named like "October 2026", at most 3 per album and 5 per artist. A new one appears each month, in a folder for its year.                                         |
 | `yearly`                 | The 100 most played tracks of each year since the history start, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                                                      |
-| `"Last Month"`           | The 50 most played tracks of the last 30 days, at most 2 per album and 5 per artist.                                                                                                                                         |
-| `"Rising"`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 2 per album and 3 per artist.                                    |
+| `"Last Month"`           | The 50 most played tracks of the last 30 days, at most 3 per album and 5 per artist.                                                                                                                                         |
+| `"Rising"`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 3 per album and 5 per artist.                                    |
 | `top_artists`            | A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks, in a "Top Artists" folder.                                                                                           |
 | `"All-Time Favourites"`  | The 100 most played tracks of all time, at most 5 per artist.                                                                                                                                                                |
 | `"Forgotten Favourites"` | Up to 100 tracks played at least 10 times, but not for a year.                                                                                                                                                               |
 | `"New and Unplayed"`     | Up to 100 tracks added to the library in the last 60 days that you haven't played yet, newest first.                                                                                                                         |
-| `time_of_day`            | What you play in the Morning (5am to noon), Afternoon (noon to 5pm), Evening (5pm to 10pm) and Late Night (10pm to 5am) over the last year, in a "Time of Day" folder. 50 tracks each, at most 2 per album and 5 per artist. |
-| `seasons`                | What you play in Winter, Spring, Summer and Autumn across every year (northern hemisphere, by month), in a "Seasons" folder. 50 tracks each, at most 2 per album and 5 per artist.                                           |
+| `time_of_day`            | What you play in the Morning (5am to noon), Afternoon (noon to 5pm), Evening (5pm to 10pm) and Late Night (10pm to 5am) over the last year, in a "Time of Day" folder. 50 tracks each, at most 3 per album and 5 per artist. |
+| `seasons`                | What you play in Winter, Spring, Summer and Autumn across every year (northern hemisphere, by month), in a "Seasons" folder. 50 tracks each, at most 3 per album and 5 per artist.                                           |
+| `days_of_week`           | What you play on each day of the week, Monday to Sunday, across every week, in a "Days of the Week" folder. 50 tracks each, at most 3 per album and 5 per artist.                                                            |
 
 ```
 Smarter Playlists
 ├── All-Time Favourites
+├── Days of the Week
+│   ├── Monday
+│   └── ...
 ├── Forgotten Favourites
 ├── Last Month
 ├── New and Unplayed
@@ -129,7 +133,7 @@ Smarter Playlists
     └── October 2026
 ```
 
-"Last Month" and "Rising" include plays estimated between imports. "Time of Day" and "Seasons" leave them out, as an estimated play has no real time of day, and they fill up as real plays build up. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
+"Last Month" and "Rising" include plays estimated between imports. "Time of Day", "Seasons" and "Days of the Week" leave them out, as an estimated play has no real time of day, and they fill up as real plays build up. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
 
 A view needs a `track_id` column, and the playlist follows its `position` column if it has one. It's exported as a playlist named after the view or, if it has a `playlist` column, as one playlist for each value of that column. That's how `monthly` makes a playlist for every month.
 
