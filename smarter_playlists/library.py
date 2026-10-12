@@ -36,6 +36,8 @@ LIBRARY_COLUMNS = [
     ('last_skipped_at', 'TIMESTAMPTZ'),
     ('added_at', 'TIMESTAMPTZ'),
     ('playlist_only', 'BOOLEAN'),
+    ('released_at', 'TIMESTAMPTZ'),
+    ('unreleased', 'BOOLEAN'),
 ]
 
 
@@ -72,6 +74,7 @@ def read_library():
             continue
 
         album = item.album()
+        release_date = to_datetime(item.releaseDate())
         track = {
             'track_id': format_persistent_id(item.persistentID()),
             'title': item.title() or '',
@@ -93,10 +96,28 @@ def read_library():
             'last_skipped_at': to_datetime(item.skipDate()),
             'added_at': to_datetime(item.addedDate()),
             'playlist_only': bool(item.isPlaylistOnly()),
+            'released_at': release_date,
+            'unreleased': is_unreleased(item.cloudType(), release_date),
         }
         tracks.append(tuple(track[column] for column, _ in LIBRARY_COLUMNS))
 
     return tracks
+
+
+# The cloud type Music gives to Apple Music catalogue tracks that were added before their release. Other catalogue tracks
+# can lack a release date too (a single released ahead of its album, say), so this is what tells them apart.
+PRE_RELEASE_CLOUD_TYPE = 9
+
+
+def is_unreleased(cloud_type, release_date):
+    """Whether a track is in the library but not out yet, as with an upcoming album's tracks added early.
+
+    Music gives these no release date, which tracks from your own files can also lack, so only tracks of the
+    pre-release cloud type are told apart that way. A release date still to come also counts.
+    """
+    if release_date is None:
+        return cloud_type == PRE_RELEASE_CLOUD_TYPE
+    return release_date > datetime.datetime.now(datetime.timezone.utc)
 
 
 def format_persistent_id(persistent_id):

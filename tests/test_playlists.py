@@ -319,6 +319,31 @@ class TestBuiltinPlaylists:
         assert self.fetch(database_name, 'New and Unplayed') == {
             'Smarter Playlists/New and Unplayed': ['A000000000000002', 'A000000000000001']}
 
+    def test_new_and_unplayed_counts_from_the_release_date_if_later_than_added(self, database_name, run_import):
+        now = datetime.datetime.now(UTC)
+        days_ago = lambda days: now - datetime.timedelta(days=days)
+        run_import(make_track(track_id='A000000000000001', album_id='C000000000000001', play_count=0,
+                              added_at=days_ago(90), released_at=days_ago(5)),   # added early, out recently
+                   make_track(track_id='A000000000000002', album_id='C000000000000002', play_count=0,
+                              added_at=days_ago(3), released_at=days_ago(4000)), # an old album added recently
+                   make_track(track_id='A000000000000003', album_id='C000000000000003', play_count=0,
+                              added_at=days_ago(90), released_at=days_ago(80)),  # neither is recent
+                   make_track(track_id='A000000000000004', album_id='C000000000000004', play_count=0,
+                              added_at=days_ago(20), released_at=None))
+
+        assert self.fetch(database_name, 'New and Unplayed') == {
+            'Smarter Playlists/New and Unplayed': ['A000000000000002', 'A000000000000001', 'A000000000000004']}
+
+    def test_new_and_unplayed_skips_tracks_not_released_yet(self, database_name, run_import):
+        added_at = datetime.datetime.now(UTC) - datetime.timedelta(days=3)
+        run_import(make_track(track_id='A000000000000001', album_id='C000000000000001', play_count=0,
+                              added_at=added_at),
+                   make_track(track_id='A000000000000002', album_id='C000000000000002', play_count=0,
+                              added_at=added_at, unreleased=True))
+
+        assert self.fetch(database_name, 'New and Unplayed') == {
+            'Smarter Playlists/New and Unplayed': ['A000000000000001']}
+
     def test_time_of_day_playlists_are_what_is_played_at_each_time(self, database_name, plays, query):
         query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
         now = datetime.datetime.now(UTC).replace(minute=0, second=0, microsecond=0)

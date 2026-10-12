@@ -105,6 +105,8 @@ def make_track(**values):
         'last_skipped_at': None,
         'added_at': datetime.datetime(2019, 8, 13, 21, 14, 28, tzinfo=UTC),
         'playlist_only': False,
+        'released_at': None,
+        'unreleased': False,
     }
     unknown = set(values) - set(track)
     assert not unknown, 'Unknown track fields: {0}'.format(unknown)

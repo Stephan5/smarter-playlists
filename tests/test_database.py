@@ -83,6 +83,7 @@ def test_only_optional_values_are_nullable(database_name, query):
         ('track', 'last_skipped_at'),
         ('track', 'added_at'),
         ('track', 'removed_at'),
+        ('track', 'released_at'),
     ]
 
 
@@ -170,11 +171,15 @@ class TestMigrations:
 
     def test_a_database_from_before_migrations_were_recorded_has_the_first(self, database_name, query, newer):
         query("DROP TABLE schema_migration, setting CASCADE")
-        newer(**{'03__AddNote': "CREATE TABLE note (note_id INT)"})
+        query("ALTER TABLE track DROP COLUMN unreleased CASCADE")
+        query("ALTER TABLE track DROP COLUMN released_at CASCADE")
+        query("DROP INDEX idx_artist_name, idx_album_title, idx_track_title, idx_track_artist_id, idx_track_album_id")
+        newer(**{'05__AddNote': "CREATE TABLE note (note_id INT)"})
 
         # Along with the repeatable ones, which weren't recorded either
-        assert database.migrate(database_name) == 3
-        assert self.applied(query) == ['01__InitialSchema', '02__AddHistoryStart', '03__AddNote']
+        assert database.migrate(database_name) == 5
+        assert self.applied(query) == ['01__InitialSchema', '02__AddHistoryStart', '03__AddUnreleased', '04__AddIndexes',
+                                       '05__AddNote']
 
     def test_a_migration_changed_since_it_was_applied_is_refused(self, database_name, newer, monkeypatch):
         (name,) = newer(**{'03__AddNote': "CREATE TABLE note (note_id INT)"})

@@ -175,17 +175,20 @@ SELECT 'Smarter Playlists' AS folder,
  ORDER BY position
  LIMIT 100;
 
--- Recently added tracks you haven't played yet, newest first. The date added isn't always when a track first arrived, as
--- tracks get added to the library again, but a track that was played before wouldn't be unplayed.
+-- Recently added or released tracks you haven't played yet, newest first, leaving out any that aren't released yet. The
+-- date added isn't always when a track first arrived, as tracks get added to the library again, but a track that was
+-- played before wouldn't be unplayed. A track added before its release counts as new from the release date, and a track
+-- released long ago from the date it was added.
 CREATE VIEW playlist."New and Unplayed" AS
 SELECT 'Smarter Playlists' AS folder,
        track_id,
-       ROW_NUMBER() OVER (ORDER BY added_at DESC, track_id) AS position
+       ROW_NUMBER() OVER (ORDER BY GREATEST(added_at, released_at) DESC, track_id) AS position
   FROM track
- WHERE added_at >= now() - INTERVAL '60 days'
+ WHERE GREATEST(added_at, released_at) >= now() - INTERVAL '60 days'
    AND play_count = 0
    AND removed_at IS NULL
    AND NOT playlist_only
+   AND NOT unreleased
  ORDER BY position
  LIMIT 100;
 

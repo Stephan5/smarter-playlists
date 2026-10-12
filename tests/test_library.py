@@ -264,6 +264,8 @@ def fake_item(**values):
         'skipDate': None,
         'addedDate': fake_date(datetime.datetime(2019, 8, 13, 21, 14, 28, tzinfo=UTC)),
         'isPlaylistOnly': False,
+        'cloudType': 8,
+        'releaseDate': fake_date(datetime.datetime(2007, 10, 10, 12, tzinfo=UTC)),
     }
     item.update(values)
     return FakeObject(**item)
@@ -310,6 +312,8 @@ class TestReadLibrary:
             'last_skipped_at': None,
             'added_at': datetime.datetime(2019, 8, 13, 21, 14, 28, tzinfo=UTC),
             'playlist_only': False,
+            'released_at': datetime.datetime(2007, 10, 10, 12, tzinfo=UTC),
+            'unreleased': False,
         }]
 
     def test_skips_everything_but_songs(self, fake_library):
@@ -355,3 +359,16 @@ class TestReadLibrary:
 
         with pytest.raises(SystemExit, match='Unable to read the Music library: denied'):
             library.read_library()
+
+    @pytest.mark.parametrize('cloud_type, release_date, unreleased', [
+        (9, None, True),                                                  # added to the library before its release
+        (8, None, False),                                                 # in Apple Music and out, just missing a date
+        (3, None, False),                                                 # your own file, which has none either
+        (8, datetime.datetime(2007, 10, 10, tzinfo=UTC), False),
+        (8, datetime.datetime.now(UTC) + datetime.timedelta(days=7), True),
+    ])
+    def test_tracks_not_out_yet_are_unreleased(self, fake_library, cloud_type, release_date, unreleased):
+        fake_library(fake_item(cloudType=cloud_type, releaseDate=release_date and fake_date(release_date)))
+
+        [track] = read_library_as_dicts()
+        assert track['unreleased'] == unreleased
