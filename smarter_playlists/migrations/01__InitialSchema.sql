@@ -5,24 +5,28 @@
 -- once, and never edited after they're released. See database.py.
 
 CREATE TABLE artist (
-    artist_id TEXT NOT NULL PRIMARY KEY,
-    name      TEXT NOT NULL
+    artist_id TEXT NOT NULL,
+    name      TEXT NOT NULL,
+
+    CONSTRAINT pk_artist PRIMARY KEY (artist_id)
 );
 
 CREATE TABLE album (
-    album_id     TEXT NOT NULL PRIMARY KEY,
+    album_id     TEXT NOT NULL,
     title        TEXT NOT NULL,
     -- Falls back to the album's most common track artist when no album artist is set, as the Music app does
     album_artist TEXT NOT NULL,
     compilation  BOOLEAN NOT NULL,
-    year         INT
+    year         INT,
+
+    CONSTRAINT pk_album PRIMARY KEY (album_id)
 );
 
 CREATE TABLE track (
-    track_id        TEXT NOT NULL PRIMARY KEY,
+    track_id        TEXT NOT NULL,
     title           TEXT NOT NULL,
-    artist_id       TEXT NOT NULL REFERENCES artist,
-    album_id        TEXT NOT NULL REFERENCES album,
+    artist_id       TEXT NOT NULL,
+    album_id        TEXT NOT NULL,
     genre           TEXT NOT NULL,
     year            INT,
     disc_number     INT NOT NULL,
@@ -38,16 +42,23 @@ CREATE TABLE track (
     playlist_only   BOOLEAN NOT NULL,
     -- Set when the track is no longer in the Music library. Its plays are kept.
     removed_at      TIMESTAMPTZ,
+
+    CONSTRAINT pk_track PRIMARY KEY (track_id),
+    CONSTRAINT fk_track_1 FOREIGN KEY (artist_id) REFERENCES artist,
+    CONSTRAINT fk_track_2 FOREIGN KEY (album_id) REFERENCES album,
     CONSTRAINT ck_track_play_count CHECK (play_count >= 0),
     CONSTRAINT ck_track_skip_count CHECK (skip_count >= 0)
 );
 
 -- One row per play. Plays that happened between imports are estimated and evenly spaced, see library.py
 CREATE TABLE play (
-    play_id   BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    track_id  TEXT NOT NULL REFERENCES track,
+    play_id   BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
+    track_id  TEXT NOT NULL,
     played_at TIMESTAMPTZ NOT NULL,
     estimated BOOLEAN NOT NULL,
+
+    CONSTRAINT pk_play PRIMARY KEY (play_id),
+    CONSTRAINT fk_play_1 FOREIGN KEY (track_id) REFERENCES track,
     CONSTRAINT uk_play_track_played_at UNIQUE (track_id, played_at)
 );
 
@@ -55,7 +66,7 @@ CREATE INDEX idx_play_played_at ON play (played_at);
 
 -- One row for each `smarter-playlists run`, for `schedule status` and to look back on how runs have gone
 CREATE TABLE run (
-    run_id            BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id            BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     started_at        TIMESTAMPTZ NOT NULL,
     -- Not set while it's running, or if it was killed before it could say how it went
     finished_at       TIMESTAMPTZ,
@@ -67,7 +78,9 @@ CREATE TABLE run (
     playlists_changed INT,
     playlists_failed  INT,
     -- Why it failed, if it did
-    error             TEXT
+    error             TEXT,
+
+    CONSTRAINT pk_run PRIMARY KEY (run_id)
 );
 
 CREATE INDEX idx_run_started_at ON run (started_at);
