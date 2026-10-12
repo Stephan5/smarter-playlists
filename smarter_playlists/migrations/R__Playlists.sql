@@ -5,7 +5,7 @@ CREATE SCHEMA IF NOT EXISTS playlist;
 
 DROP VIEW IF EXISTS playlist.monthly, playlist.yearly, playlist.last_month, playlist.rising, playlist.top_artists,
                     playlist.all_time_favourites, playlist.forgotten_favourites, playlist.new_and_unplayed,
-                    playlist.time_of_day, playlist.seasons, playlist.days_of_week;
+                    playlist.time_of_day, playlist.seasons, playlist.days_of_week, playlist.evergreens;
 
 -- The names these views had before they were renamed, and named their playlists
 DROP VIEW IF EXISTS playlist."Last Month", playlist."Rising", playlist."All-Time Favourites",
@@ -316,3 +316,38 @@ SELECT 'Smarter Playlists/Days of the Week' AS folder,
          WHERE album_rank <= 3
            AND artist_rank <= 5) AS limited
  WHERE position <= 50;
+
+-- Tracks that keep coming back: those played in the most different months, and at least 6 of them, then by plays. Up
+-- to 50 tracks with at most 3 from any album and 5 from any artist. Estimated plays are left out, as they're spread
+-- evenly and would make every track look like it was played all along.
+CREATE VIEW playlist.evergreens AS
+SELECT 'Smarter Playlists' AS folder,
+       'Evergreens' AS playlist,
+       track_id,
+       ROW_NUMBER() OVER (ORDER BY months DESC, plays DESC, last_played_at DESC, track_id) AS position
+  FROM (SELECT track_id,
+               months,
+               plays,
+               last_played_at,
+               ROW_NUMBER() OVER (PARTITION BY album_id
+                                      ORDER BY months DESC, plays DESC, last_played_at DESC, track_id) AS album_rank,
+               ROW_NUMBER() OVER (PARTITION BY artist_id
+                                      ORDER BY months DESC, plays DESC, last_played_at DESC, track_id) AS artist_rank
+          FROM (SELECT track_id,
+                       album_id,
+                       artist_id,
+                       COUNT(DISTINCT DATE_TRUNC('month', played_at)) AS months,
+                       COUNT(*) AS plays,
+                       MAX(played_at) AS last_played_at
+                  FROM play
+                  JOIN track USING (track_id)
+                 WHERE played_at::date >= (SELECT history_start FROM setting)
+                   AND NOT estimated
+                   AND removed_at IS NULL
+                   AND NOT playlist_only
+                 GROUP BY track_id, album_id, artist_id) AS track_plays
+         WHERE months >= 6) AS ranked
+ WHERE album_rank <= 3
+   AND artist_rank <= 5
+ ORDER BY position
+ LIMIT 50;

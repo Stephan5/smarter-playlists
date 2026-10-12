@@ -80,7 +80,7 @@ Add `WHERE NOT estimated` to a query to count only the plays that were actually 
 
 ### History start
 
-Plays from before you started importing are only guesses, so the playlist views and `stats` ignore any before the `history_start` date in the `setting` table, which `setup` sets to the day it ran. That covers `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day`, `seasons` and `days_of_week`. Views built from each track's play count, like `"All-Time Favourites"`, aren't affected, as Music keeps no dates for those plays.
+Plays from before you started importing are only guesses, so the playlist views and `stats` ignore any before the `history_start` date in the `setting` table, which `setup` sets to the day it ran. That covers `monthly`, `yearly`, `"Last Month"`, `"Rising"`, `time_of_day`, `seasons`, `days_of_week` and `evergreens`. Views built from each track's play count, like `"All-Time Favourites"`, aren't affected, as Music keeps no dates for those plays.
 
 To use a different date, e.g. the day your install started recording real plays, change it and export again. The date is compared with the date of each play in the database's time zone. `'-infinity'` ignores nothing:
 
@@ -108,6 +108,7 @@ Every view in the `playlist` schema is exported to Music. `setup` creates these 
 | `time_of_day`          | What you play in the Morning (5am to noon), Afternoon (noon to 5pm), Evening (5pm to 10pm) and Late Night (10pm to 5am) over the last year, in a "Time of Day" folder. 50 tracks each, at most 3 per album and 5 per artist. |
 | `seasons`              | What you play in Winter, Spring, Summer and Autumn across every year (northern hemisphere, by month), in a "Seasons" folder. 50 tracks each, at most 3 per album and 5 per artist.                                           |
 | `days_of_week`         | What you play on each day of the week, Monday to Sunday, across every week, in a "Days of the Week" folder. 50 tracks each, at most 3 per album and 5 per artist.                                                            |
+| `evergreens`           | Up to 50 tracks you keep coming back to: played in at least 6 different months, most months first, at most 3 per album and 5 per artist. Estimated plays are left out.                                                      |
 
 ```
 Smarter Playlists
@@ -115,6 +116,7 @@ Smarter Playlists
 ├── Days of the Week
 │   ├── Monday
 │   └── ...
+├── Evergreens
 ├── Forgotten Favourites
 ├── Last Month
 ├── New and Unplayed
@@ -133,7 +135,7 @@ Smarter Playlists
     └── October 2026
 ```
 
-"Last Month" and "Rising" include plays estimated between imports. "Time of Day", "Seasons" and "Days of the Week" leave them out, as an estimated play has no real time of day, and they fill up as real plays build up. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
+"Last Month" and "Rising" include plays estimated between imports. "Time of Day", "Seasons", "Days of the Week" and "Evergreens" leave them out, as an estimated play has no real time of day, and they fill up as real plays build up. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
 
 A view needs `track_id` and `playlist` columns, and the playlist follows its `position` column if it has one. A `playlist` column names the playlist of each row, so one view can make many: that's how `monthly` makes a playlist for every month. Give it a single value, like `'Skipped' AS playlist`, for a view with just one playlist.
 

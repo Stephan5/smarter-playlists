@@ -274,7 +274,7 @@ class TestBuiltinPlaylists:
         plays({1: days_ago(2, 3, 4)})
         query("UPDATE setting SET history_start = %s", [(now - datetime.timedelta(days=1)).date()])
 
-        for view in ['last_month', 'rising', 'time_of_day', 'seasons', 'days_of_week', 'monthly', 'yearly']:
+        for view in ['last_month', 'rising', 'time_of_day', 'seasons', 'days_of_week', 'monthly', 'yearly', 'evergreens']:
             assert self.fetch(database_name, view) == {}, view
 
     def test_history_start_is_the_day_it_starts_on(self, database_name, plays, query):
@@ -401,6 +401,18 @@ class TestBuiltinPlaylists:
         assert self.fetch(database_name, 'days_of_week') == {
             'Smarter Playlists/Days of the Week/' + day: ['A00000000000000' + str(n)]
             for n, day in enumerate(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], 1)}
+
+    def test_evergreens_are_tracks_played_in_the_most_months(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
+        plays({1: [at(2026, month, 1) for month in range(1, 7)],
+               2: [at(2026, month, 1) for month in range(1, 9)],
+               3: [at(2026, 1, day) for day in range(1, 20)],  # many plays, but all in one month
+               4: [at(2026, month, 1) for month in range(1, 7)],
+               5: [at(2026, month, 1) for month in range(1, 8)]})
+        query("UPDATE play SET estimated = TRUE WHERE track_id = 'A000000000000005' AND played_at > DATE '2026-05-01'")
+
+        assert self.fetch(database_name, 'evergreens') == {
+            'Smarter Playlists/Evergreens': ['A000000000000002', 'A000000000000001', 'A000000000000004']}
 
     def test_top_artists_are_playlists_of_their_top_tracks(self, database_name, run_import):
         big = [make_track(track_id='A1{0:014X}'.format(n), artist_id='B000000000000BIG', artist_name='Big',
