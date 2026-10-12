@@ -2,6 +2,31 @@
 
 Newest first. A release's description on GitHub is its section here.
 
+## 1.1.1
+
+macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
+
+### Changed
+
+* **The launchd agent and its log are renamed** to `io.github.stephan5.smarter-playlists`, instead of `local.smarter-playlists`. The agent is now `~/Library/LaunchAgents/io.github.stephan5.smarter-playlists.plist` and the log `~/Library/Logs/io.github.stephan5.smarter-playlists.log`.
+
+### Upgrading from 1.1.0
+
+If you scheduled it, `schedule uninstall` from 1.1.0 is the only thing that removes the old agent, so remove it before updating, then install again:
+
+```bash
+smarter-playlists schedule uninstall
+# update, then
+smarter-playlists schedule install
+```
+
+If you've already updated, remove the old agent by hand:
+
+```bash
+launchctl bootout gui/$(id -u)/local.smarter-playlists
+rm ~/Library/LaunchAgents/local.smarter-playlists.plist
+```
+
 ## 1.1.0
 
 macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
