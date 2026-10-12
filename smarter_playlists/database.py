@@ -137,8 +137,9 @@ def pending_migrations(db):
                          "Update Smarter Playlists".format(max(unknown)))
     for version, name, sql_text in available:
         if version in applied and applied[version][1] != checksum(sql_text):
-            raise SystemExit("Migration {0} has changed since it was applied to the database. Migrations are never "
-                             "edited once released: put the change in a new one".format(name))
+            raise SystemExit("Migration {0} has changed since it was applied to the database (checksum {1}, now {2}). "
+                             "Migrations are never edited once released: put the change in a new one"
+                             .format(name, applied[version][1], checksum(sql_text)))
     return [migration for migration in available if migration[0] not in applied]
 
 

@@ -189,7 +189,7 @@ class TestMigrations:
         monkeypatch.setattr(database, 'migrations', lambda: changed)
 
         with database.connect(database_name) as db:
-            with pytest.raises(SystemExit, match=name + ' has changed since it was applied'):
+            with pytest.raises(SystemExit, match=name + ' has changed since it was applied to the database \\(checksum \\w+, now \\w+\\)'):
                 database.require_set_up(db)
 
     def test_a_database_from_a_newer_version_is_refused(self, database_name, query):
