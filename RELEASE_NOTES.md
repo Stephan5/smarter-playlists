@@ -2,6 +2,51 @@
 
 Newest first. A release's description on GitHub is its section here.
 
+## 1.2.0
+
+macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.
+
+### Added
+
+* **Days of the Week playlists.** `days_of_week` makes a playlist for each day of the week, Monday to Sunday, of what you play on that day across every week, in a "Days of the Week" folder.
+* **Unreleased tracks.** Tracks in your library that aren't out yet, like an upcoming album added early, are marked `unreleased` on `track`, and `released_at` holds the release date where Music has one. Both are set on every import.
+* Indexes for finding tracks, albums and artists by name, and for the joins from a track to its artist and album.
+
+### Changed
+
+* **A view needs a `playlist` column.** Every view in the `playlist` schema must now name its playlists with one, as `monthly` does, instead of a view without one making a playlist named after itself. This lets views have standard SQL names. A view without the column is refused: `View 'x' has no playlist column`. Add one to your own views, e.g. `'Skipped' AS playlist`.
+* **The built-in views are renamed** to snake case: `last_month`, `rising`, `all_time_favourites`, `forgotten_favourites` and `new_and_unplayed`. The playlists keep their names, so nothing changes in Music. The old views are dropped when they're recreated, and a playlist's description now names the new view.
+* **"New and Unplayed" leaves out unreleased tracks**, and counts a track as new from the later of the date it was added and its release date, so an album added early appears when it comes out, and an old album added yesterday appears too.
+* A numbered migration that has changed since it was applied now has both checksums in the error.
+
+### Upgrading from 1.1.1
+
+The initial migration's constraints now have names, which `migrate` can't change for you. Back up first, then run this once, then migrate:
+
+```bash
+smarter-playlists backup
+smarter-playlists psql <<'SQL'
+BEGIN;
+
+ALTER TABLE artist RENAME CONSTRAINT artist_pkey TO pk_artist;
+ALTER TABLE album  RENAME CONSTRAINT album_pkey  TO pk_album;
+ALTER TABLE track  RENAME CONSTRAINT track_pkey  TO pk_track;
+ALTER TABLE play   RENAME CONSTRAINT play_pkey   TO pk_play;
+ALTER TABLE run    RENAME CONSTRAINT run_pkey    TO pk_run;
+
+ALTER TABLE track RENAME CONSTRAINT track_artist_id_fkey TO fk_track_1;
+ALTER TABLE track RENAME CONSTRAINT track_album_id_fkey  TO fk_track_2;
+ALTER TABLE play  RENAME CONSTRAINT play_track_id_fkey   TO fk_play_1;
+
+UPDATE schema_migration SET checksum = '11791671' WHERE version = 1;
+
+COMMIT;
+SQL
+smarter-playlists migrate
+```
+
+Then add a `playlist` column to any views of your own.
+
 ## 1.1.1
 
 macOS, Apple Silicon (arm64) only. Intel Macs can install from source, see the README.

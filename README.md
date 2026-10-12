@@ -95,19 +95,19 @@ Playlists from months before the new date stay in Music, as playlists are never 
 
 Every view in the `playlist` schema is exported to Music. `setup` creates these to start with (see [`R__Playlists.sql`](smarter_playlists/migrations/R__Playlists.sql)), all in a "Smarter Playlists" folder:
 
-| View                     | Playlists                                                                                                                                                                                                                    |
-|--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `monthly`                | The 50 most played tracks of each month since the [history start](#history-start), named like "October 2026", at most 3 per album and 5 per artist. A new one appears each month, in a folder for its year.                                         |
-| `yearly`                 | The 100 most played tracks of each year since the history start, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                                                      |
-| `"Last Month"`           | The 50 most played tracks of the last 30 days, at most 3 per album and 5 per artist.                                                                                                                                         |
-| `"Rising"`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 3 per album and 5 per artist.                                    |
-| `top_artists`            | A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks, in a "Top Artists" folder.                                                                                           |
-| `"All-Time Favourites"`  | The 100 most played tracks of all time, at most 5 per artist.                                                                                                                                                                |
-| `"Forgotten Favourites"` | Up to 100 tracks played at least 10 times, but not for a year.                                                                                                                                                               |
-| `"New and Unplayed"`     | Up to 100 tracks added to the library or released in the last 60 days that you haven't played yet, newest first, leaving out any not yet released.                                                                           |
-| `time_of_day`            | What you play in the Morning (5am to noon), Afternoon (noon to 5pm), Evening (5pm to 10pm) and Late Night (10pm to 5am) over the last year, in a "Time of Day" folder. 50 tracks each, at most 3 per album and 5 per artist. |
-| `seasons`                | What you play in Winter, Spring, Summer and Autumn across every year (northern hemisphere, by month), in a "Seasons" folder. 50 tracks each, at most 3 per album and 5 per artist.                                           |
-| `days_of_week`           | What you play on each day of the week, Monday to Sunday, across every week, in a "Days of the Week" folder. 50 tracks each, at most 3 per album and 5 per artist.                                                            |
+| View                   | Playlists                                                                                                                                                                                                                    |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `monthly`              | The 50 most played tracks of each month since the [history start](#history-start), named like "October 2026", at most 3 per album and 5 per artist. A new one appears each month, in a folder for its year.                  |
+| `yearly`               | The 100 most played tracks of each year since the history start, named like "2026", at most 5 per album and 10 per artist. A new one appears each year, in the folder for that year.                                         |
+| `last_month`           | The 50 most played tracks of the last 30 days, at most 3 per album and 5 per artist.                                                                                                                                         |
+| `rising`               | What you're getting into: up to 50 tracks played more in the last 30 days than in the 90 days before, and at least twice, ordered by how much more. At most 3 per album and 5 per artist.                                    |
+| `top_artists`          | A playlist for each of your 10 most played artists, named after them, with their 25 most played tracks, in a "Top Artists" folder.                                                                                           |
+| `all_time_favourites`  | The 100 most played tracks of all time, at most 5 per artist.                                                                                                                                                                |
+| `forgotten_favourites` | Up to 100 tracks played at least 10 times, but not for a year.                                                                                                                                                               |
+| `new_and_unplayed`     | Up to 100 tracks added to the library or released in the last 60 days that you haven't played yet, newest first, leaving out any not yet released.                                                                           |
+| `time_of_day`          | What you play in the Morning (5am to noon), Afternoon (noon to 5pm), Evening (5pm to 10pm) and Late Night (10pm to 5am) over the last year, in a "Time of Day" folder. 50 tracks each, at most 3 per album and 5 per artist. |
+| `seasons`              | What you play in Winter, Spring, Summer and Autumn across every year (northern hemisphere, by month), in a "Seasons" folder. 50 tracks each, at most 3 per album and 5 per artist.                                           |
+| `days_of_week`         | What you play on each day of the week, Monday to Sunday, across every week, in a "Days of the Week" folder. 50 tracks each, at most 3 per album and 5 per artist.                                                            |
 
 ```
 Smarter Playlists
@@ -135,15 +135,17 @@ Smarter Playlists
 
 "Last Month" and "Rising" include plays estimated between imports. "Time of Day", "Seasons" and "Days of the Week" leave them out, as an estimated play has no real time of day, and they fill up as real plays build up. Rising stays empty until imports have built up a few weeks of real listening, as the first import spreads past plays evenly. Playlists are never deleted, so when an artist drops out of your top 10, their Top Artists playlist stays as it was.
 
-A view needs a `track_id` column, and the playlist follows its `position` column if it has one. It's exported as a playlist named after the view or, if it has a `playlist` column, as one playlist for each value of that column. That's how `monthly` makes a playlist for every month.
+A view needs `track_id` and `playlist` columns, and the playlist follows its `position` column if it has one. A `playlist` column names the playlist of each row, so one view can make many: that's how `monthly` makes a playlist for every month. Give it a single value, like `'Skipped' AS playlist`, for a view with just one playlist.
 
 A `folder` column puts playlists in a folder, with `/` between nested folders, e.g. `'Smarter Playlists/2026'`. Without one, playlists go at the top level.
 
 To add your own, create a view in the `playlist` schema with `smarter-playlists psql`, which works the same for the binary and a clone, or put the SQL in a file and run `smarter-playlists psql -f my_views.sql`. For example, a playlist of tracks you keep skipping:
 
 ```sql
-CREATE VIEW playlist."Skipped" AS
-SELECT track_id,
+CREATE VIEW playlist.skipped AS
+SELECT 'Smarter Playlists' AS folder,
+       'Skipped' AS playlist,
+       track_id,
        ROW_NUMBER() OVER (ORDER BY skip_count DESC) AS position
   FROM track
  WHERE skip_count >= 5
