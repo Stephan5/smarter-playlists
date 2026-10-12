@@ -3,9 +3,13 @@
 
 CREATE SCHEMA IF NOT EXISTS playlist;
 
-DROP VIEW IF EXISTS playlist.monthly, playlist.yearly, playlist."Last Month", playlist."Rising", playlist.top_artists,
-                    playlist."All-Time Favourites", playlist."Forgotten Favourites", playlist."New and Unplayed",
+DROP VIEW IF EXISTS playlist.monthly, playlist.yearly, playlist.last_month, playlist.rising, playlist.top_artists,
+                    playlist.all_time_favourites, playlist.forgotten_favourites, playlist.new_and_unplayed,
                     playlist.time_of_day, playlist.seasons, playlist.days_of_week;
+
+-- The names these views had before they were renamed, and named their playlists
+DROP VIEW IF EXISTS playlist."Last Month", playlist."Rising", playlist."All-Time Favourites",
+                    playlist."Forgotten Favourites", playlist."New and Unplayed";
 
 -- The most played tracks of each month since history_start, named like "October 2026", with at most 3 tracks from any
 -- album and 5 from any artist. A new playlist appears each month, in a folder for its year. Months and years follow the
@@ -67,8 +71,9 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
  WHERE position <= 100;
 
 -- The most played tracks of the last 30 days, with at most 3 tracks from any album and 5 from any artist
-CREATE VIEW playlist."Last Month" AS
+CREATE VIEW playlist.last_month AS
 SELECT 'Smarter Playlists' AS folder,
+       'Last Month' AS playlist,
        track_id,
        ROW_NUMBER() OVER (ORDER BY plays DESC, last_played_at DESC, track_id) AS position
   FROM (SELECT track_id,
@@ -92,8 +97,9 @@ SELECT 'Smarter Playlists' AS folder,
 
 -- What you're getting into: tracks played more in the last 30 days than in the 90 days before, at least twice, ordered
 -- by how much more. At most 3 tracks from any album and 5 from any artist.
-CREATE VIEW playlist."Rising" AS
+CREATE VIEW playlist.rising AS
 SELECT 'Smarter Playlists' AS folder,
+       'Rising' AS playlist,
        track_id,
        ROW_NUMBER() OVER (ORDER BY recent_plays - earlier_plays DESC, recent_plays DESC, track_id) AS position
   FROM (SELECT track_id,
@@ -148,8 +154,9 @@ SELECT 'Smarter Playlists/Top Artists' AS folder,
  WHERE position <= 25;
 
 -- The most played tracks of all time, with at most 5 tracks per artist
-CREATE VIEW playlist."All-Time Favourites" AS
+CREATE VIEW playlist.all_time_favourites AS
 SELECT 'Smarter Playlists' AS folder,
+       'All-Time Favourites' AS playlist,
        track_id,
        ROW_NUMBER() OVER (ORDER BY play_count DESC, track_id) AS position
   FROM (SELECT track_id,
@@ -163,8 +170,9 @@ SELECT 'Smarter Playlists' AS folder,
  LIMIT 100;
 
 -- Well loved tracks that haven't been played for a year
-CREATE VIEW playlist."Forgotten Favourites" AS
+CREATE VIEW playlist.forgotten_favourites AS
 SELECT 'Smarter Playlists' AS folder,
+       'Forgotten Favourites' AS playlist,
        track_id,
        ROW_NUMBER() OVER (ORDER BY play_count DESC, track_id) AS position
   FROM track
@@ -179,8 +187,9 @@ SELECT 'Smarter Playlists' AS folder,
 -- date added isn't always when a track first arrived, as tracks get added to the library again, but a track that was
 -- played before wouldn't be unplayed. A track added before its release counts as new from the release date, and a track
 -- released long ago from the date it was added.
-CREATE VIEW playlist."New and Unplayed" AS
+CREATE VIEW playlist.new_and_unplayed AS
 SELECT 'Smarter Playlists' AS folder,
+       'New and Unplayed' AS playlist,
        track_id,
        ROW_NUMBER() OVER (ORDER BY GREATEST(added_at, released_at) DESC, track_id) AS position
   FROM track

@@ -26,9 +26,9 @@ def test_creates_builtin_playlists(database_name, query, run_import):
     run_import(make_track())
 
     views = query("SELECT table_name FROM information_schema.views WHERE table_schema = 'playlist' ORDER BY 1")
-    assert {'monthly', 'yearly', 'Rising'} <= {view for (view,) in views}
+    assert {'monthly', 'yearly', 'rising'} <= {view for (view,) in views}
     for (view,) in views:
-        query('SELECT track_id, position FROM playlist."{0}"'.format(view))
+        query('SELECT playlist, track_id, position FROM playlist."{0}"'.format(view))
 
 
 def test_refuses_to_run_twice(database_name):
@@ -258,7 +258,7 @@ class TestRepeatableMigrations:
         assert query("SELECT count(*) FROM schema_migration WHERE name = 'R__Note'") == [(0,)]
 
     def test_changed_built_in_playlists_are_recreated_but_added_ones_kept(self, database_name, query):
-        query("CREATE VIEW playlist.mine AS SELECT track_id FROM track")
+        query("CREATE VIEW playlist.mine AS SELECT 'Mine' AS playlist, track_id FROM track")
         query("DROP VIEW playlist.monthly")
         query("UPDATE schema_migration SET checksum = 'old' WHERE version IS NULL")
 
