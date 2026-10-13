@@ -13,7 +13,8 @@ DROP VIEW IF EXISTS playlist."Last Month", playlist."Rising", playlist."All-Time
 
 -- The most played tracks of each month since history_start, named like "October 2026", with at most 3 tracks from any
 -- album and 5 from any artist. A new playlist appears each month, in a folder for its year. Months and years follow the
--- database's time zone, so history_start is compared as a date rather than a timestamp.
+-- database's time zone, so history_start is compared as a date rather than a timestamp. A month's playlist appears
+-- once the month is a week old, so it isn't made from just a few days of plays.
 CREATE VIEW playlist.monthly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
        TO_CHAR(month, 'FMMonth YYYY') AS playlist,
@@ -34,6 +35,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
                           FROM play
                           JOIN track USING (track_id)
                          WHERE played_at::date >= (SELECT history_start FROM setting)
+                           AND now() >= DATE_TRUNC('month', played_at) + INTERVAL '7 days'
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY month, track_id, album_id, artist_id) AS track_plays
@@ -42,7 +44,8 @@ SELECT 'Smarter Playlists/' || TO_CHAR(month, 'YYYY') AS folder,
  WHERE position <= 50;
 
 -- The most played tracks of each year since history_start, named like "2026", with at most 5 tracks from any album and 10 from
--- any artist. A new playlist appears each year, in a folder for its year alongside its monthly playlists.
+-- any artist. A new playlist appears each year, once the year is a month old, in a folder for its year alongside its
+-- monthly playlists.
 CREATE VIEW playlist.yearly AS
 SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
        TO_CHAR(year, 'YYYY') AS playlist,
@@ -63,6 +66,7 @@ SELECT 'Smarter Playlists/' || TO_CHAR(year, 'YYYY') AS folder,
                           FROM play
                           JOIN track USING (track_id)
                          WHERE played_at::date >= (SELECT history_start FROM setting)
+                           AND now() >= DATE_TRUNC('year', played_at) + INTERVAL '1 month'
                            AND removed_at IS NULL
                            AND NOT playlist_only) AS plays
                  GROUP BY year, track_id, album_id, artist_id) AS track_plays

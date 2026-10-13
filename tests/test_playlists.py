@@ -247,24 +247,24 @@ class TestBuiltinPlaylists:
             return {playlist.path: playlist.track_ids for playlist in playlists.fetch_view(db, view)}
 
     def test_monthly_playlists_start_at_history_start(self, database_name, plays, query):
-        plays({1: [at(2026, 9, 15), at(2026, 10, 2), at(2026, 11, 3), at(2027, 1, 20)],
-               2: [at(2026, 10, 5), at(2026, 10, 6)]})
-        query("UPDATE setting SET history_start = DATE '2026-10-06'")
+        plays({1: [at(2024, 9, 15), at(2024, 10, 2), at(2024, 11, 3), at(2025, 1, 20)],
+               2: [at(2024, 10, 5), at(2024, 10, 6)]})
+        query("UPDATE setting SET history_start = DATE '2024-10-06'")
 
         assert self.fetch(database_name, 'monthly') == {
-            'Smarter Playlists/2026/October 2026': ['A000000000000002'],
-            'Smarter Playlists/2026/November 2026': ['A000000000000001'],
-            'Smarter Playlists/2027/January 2027': ['A000000000000001'],
+            'Smarter Playlists/2024/October 2024': ['A000000000000002'],
+            'Smarter Playlists/2024/November 2024': ['A000000000000001'],
+            'Smarter Playlists/2025/January 2025': ['A000000000000001'],
         }
 
     def test_yearly_playlists_start_at_history_start(self, database_name, plays, query):
-        plays({1: [at(2025, 6, 1), at(2026, 2, 1), at(2027, 3, 1)],
-               2: [at(2026, 5, 1), at(2026, 6, 1)]})
-        query("UPDATE setting SET history_start = DATE '2026-05-15'")
+        plays({1: [at(2023, 6, 1), at(2024, 2, 1), at(2025, 3, 1)],
+               2: [at(2024, 5, 1), at(2024, 6, 1)]})
+        query("UPDATE setting SET history_start = DATE '2024-05-15'")
 
         assert self.fetch(database_name, 'yearly') == {
-            'Smarter Playlists/2026/2026': ['A000000000000002'],
-            'Smarter Playlists/2027/2027': ['A000000000000001'],
+            'Smarter Playlists/2024/2024': ['A000000000000002'],
+            'Smarter Playlists/2025/2025': ['A000000000000001'],
         }
 
     def test_history_start_applies_to_every_view_built_from_plays(self, database_name, plays, query):
@@ -278,16 +278,26 @@ class TestBuiltinPlaylists:
             assert self.fetch(database_name, view) == {}, view
 
     def test_history_start_is_the_day_it_starts_on(self, database_name, plays, query):
-        plays({1: [at(2026, 10, 5), at(2026, 10, 6)], 2: [at(2026, 10, 5)]})
-        query("UPDATE setting SET history_start = DATE '2026-10-06'")
+        plays({1: [at(2024, 10, 5), at(2024, 10, 6)], 2: [at(2024, 10, 5)]})
+        query("UPDATE setting SET history_start = DATE '2024-10-06'")
 
-        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000001']}
+        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2024/October 2024': ['A000000000000001']}
 
     def test_monthly_playlists_limit_tracks_per_album(self, database_name, plays, query):
-        plays({n: [at(2026, 10, day) for day in range(1, n + 2)] for n in range(1, 5)})
+        plays({n: [at(2024, 10, day) for day in range(1, n + 2)] for n in range(1, 5)})
         query("UPDATE track SET album_id = 'C000000000000001'")
 
-        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000004', 'A000000000000003', 'A000000000000002']}
+        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2024/October 2024': ['A000000000000004', 'A000000000000003', 'A000000000000002']}
+
+    def test_monthly_and_yearly_playlists_wait_for_the_month_and_year_to_be_old_enough(self, database_name, plays, query):
+        query("ALTER DATABASE {0} SET timezone = 'UTC'".format(database_name))
+        now = datetime.datetime.now(UTC)
+        month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        year = month.replace(month=1)
+        plays({1: [now]})
+
+        assert bool(self.fetch(database_name, 'monthly')) == (now >= month + datetime.timedelta(days=7))
+        assert bool(self.fetch(database_name, 'yearly')) == (now >= year.replace(month=2))
 
     def test_last_month_is_the_last_30_days(self, database_name, plays):
         now = datetime.datetime.now(UTC)
@@ -431,11 +441,11 @@ class TestBuiltinPlaylists:
         assert top_artists['Smarter Playlists/Top Artists/Big'] == ['A1{0:014X}'.format(n) for n in range(29, 4, -1)]
 
     def test_monthly_playlists_skip_removed_and_playlist_only_tracks(self, database_name, plays, query):
-        plays({1: [at(2026, 10, 1)], 2: [at(2026, 10, 1)], 3: [at(2026, 10, 1)]},
+        plays({1: [at(2024, 10, 1)], 2: [at(2024, 10, 1)], 3: [at(2024, 10, 1)]},
               {2: {'playlist_only': True}})
         query("UPDATE track SET removed_at = now() WHERE track_id = 'A000000000000003'")
 
-        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2026/October 2026': ['A000000000000001']}
+        assert self.fetch(database_name, 'monthly') == {'Smarter Playlists/2024/October 2024': ['A000000000000001']}
 
 
 @pytest.mark.parametrize('view', ['monthly', 'all_time_favourites', 'say "hi"'])
@@ -475,15 +485,15 @@ def test_reports_what_changed(database_name, query, tracks, no_builtin_playlists
 
 @pytest.mark.parametrize('time_zone, expected', [
     # 00:30 on 1 October in London is still 30 September in UTC and Los Angeles, which is before history starts
-    ('Europe/London', {'Smarter Playlists/2026/October 2026': ['A000000000000001']}),
+    ('Europe/London', {'Smarter Playlists/2024/October 2024': ['A000000000000001']}),
     ('UTC', {}),
     ('America/Los_Angeles', {}),
 ])
 def test_months_follow_the_database_time_zone(database_name, run_import, query, monkeypatch, time_zone, expected):
     run_import(make_track())
-    query("UPDATE setting SET history_start = DATE '2026-10-01'")
+    query("UPDATE setting SET history_start = DATE '2024-10-01'")
     query("INSERT INTO play (track_id, played_at, estimated) VALUES ('A000000000000001', %s, FALSE)",
-          [datetime.datetime(2026, 9, 30, 23, 30, tzinfo=UTC)])
+          [datetime.datetime(2024, 9, 30, 23, 30, tzinfo=UTC)])
     monkeypatch.setenv('PGTZ', time_zone)
 
     with database.connect(database_name) as db:
