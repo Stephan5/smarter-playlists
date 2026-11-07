@@ -475,7 +475,7 @@ def test_reports_what_changed(database_name, query, tracks, no_builtin_playlists
 
     *logged, summary = [(record.levelname, record.getMessage()) for record in caplog.records]
     assert logged == [
-        ('INFO', "{0} 1 playlists in Music, which can take a minute...".format("Checking" if dry_run else "Updating")),
+        ('DEBUG', "{0} 1 playlists in Music, which can take a minute...".format("Checking" if dry_run else "Updating")),
         (level, message)]
     changed = int(result['changed'])
     assert summary[0] == 'INFO'
