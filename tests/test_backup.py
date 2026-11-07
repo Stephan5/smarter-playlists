@@ -1,5 +1,4 @@
 import datetime
-import logging
 import shutil
 import tempfile
 
@@ -69,16 +68,6 @@ def test_takes_a_backup(database_name, tmp_path, caplog):
     assert path == tmp_path / 'music-2026-10-06T140200.dump'
     assert path.stat().st_size > 0
     assert list(tmp_path.iterdir()) == [path]
-    # Routine before most commands, so only shown with --verbose
-    assert caplog.records[-1].levelname == 'DEBUG'
-    assert caplog.messages[-1].startswith('Backed up to {0} ('.format(path))
-
-
-def test_says_where_the_backup_is_when_asked(database_name, tmp_path, caplog):
-    caplog.set_level('INFO')
-
-    path = backup.take(tmp_path, database_name, now=NOW, level=logging.INFO)
-
     assert caplog.messages[-1].startswith('Backed up to {0} ('.format(path))
 
 

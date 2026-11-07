@@ -240,7 +240,7 @@ def show_stats(args):
 
 def take_backup(args):
     with server.work(), server.running():
-        backup.take(args.backup_dir, level=logging.INFO)
+        backup.take(args.backup_dir)
 
 
 def restore(args):

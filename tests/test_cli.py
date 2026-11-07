@@ -20,7 +20,7 @@ def calls(monkeypatch):
     recorded = Calls()
 
     def record(name, result=None):
-        return lambda *args, **kwargs: recorded.append((name, *args, *kwargs.values())) or result
+        return lambda *args: recorded.append((name, *args)) or result
 
     @contextlib.contextmanager
     def context(name, value=None):
@@ -73,7 +73,7 @@ def calls(monkeypatch):
                                            '/recorded scheduled dry run',
                                            '/running', '/work']),
     (['migrate'], ['work', 'running', ('migrate', True), '/running', '/work']),
-    (['backup'], ['work', 'running', ('backup', None, logging.INFO), '/running', '/work']),
+    (['backup'], ['work', 'running', ('backup', None), '/running', '/work']),
     (['restore', 'old.dump'], ['work', 'running', ('restore', 'old.dump', None), '/running', '/work']),
     (['upgrade'], ['work', ('upgrade',), '/work']),
     (['db', 'start'], [('db start', None)]),
@@ -300,7 +300,7 @@ def test_requires_a_command(capsys):
 
 
 def test_logs_why_a_command_failed(calls, monkeypatch, caplog):
-    def fail(*args, **kwargs):
+    def fail(*args):
         raise SystemExit("The database isn't set up yet")
     monkeypatch.setattr(backup, 'take', fail)
 
@@ -313,7 +313,7 @@ def test_logs_why_a_command_failed(calls, monkeypatch, caplog):
 
 
 def test_logs_unexpected_errors(calls, monkeypatch, caplog):
-    def fail(*args, **kwargs):
+    def fail(*args):
         raise ValueError('oops')
     monkeypatch.setattr(backup, 'take', fail)
 
