@@ -63,8 +63,8 @@ def export_playlists(database_name, names=(), dry_run=False):
         return 0
 
     # Music takes a while, a minute or more, to update many playlists, and says nothing until it's done
-    logging.info("%s %d playlists in Music, which can take a minute...", "Checking" if dry_run else "Updating",
-                 len(playlists))
+    logging.debug("%s %d playlists in Music, which can take a minute...", "Checking" if dry_run else "Updating",
+                  len(playlists))
     elapsed = timing.Stopwatch()
     results = sync_playlists(playlists, dry_run)
     changed = failed = 0
