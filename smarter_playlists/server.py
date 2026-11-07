@@ -169,8 +169,9 @@ def tcp_address():
     return '{0}:{1}'.format(host, port()) if host else None
 
 
-def start(tcp_port=None, settings=None):
-    """Starts the server. With a port, it also listens on localhost, for other database tools."""
+def start(tcp_port=None, settings=None, level=logging.DEBUG):
+    """Starts the server. With a port, it also listens on localhost, for other database tools. Says so at `level`:
+    routine for most commands, but the point of `db start`."""
     warn_if_outdated()
     options = []
     if tcp_port:
@@ -180,15 +181,15 @@ def start(tcp_port=None, settings=None):
     elapsed = timing.Stopwatch()
     run([program('pg_ctl'), 'start', '-D', data_dir(), '-l', log_path(), '-w',
          *(['-o', ' '.join(options)] if options else [])], env=server_environment())
-    logging.debug("Started Postgres %d%s in %s", cluster_version(), " on port {0}".format(tcp_port) if tcp_port else "",
-                  elapsed)
+    logging.log(level, "Started Postgres %d%s in %s", cluster_version(),
+                " on port {0}".format(tcp_port) if tcp_port else "", elapsed)
 
 
-def stop():
+def stop(level=logging.DEBUG):
     logging.debug("Stopping Postgres...")
     elapsed = timing.Stopwatch()
     run([program('pg_ctl'), 'stop', '-D', data_dir(), '-m', 'fast', '-w'])
-    logging.debug("Stopped Postgres in %s", elapsed)
+    logging.log(level, "Stopped Postgres in %s", elapsed)
 
 
 def warn_if_outdated():
@@ -267,7 +268,7 @@ def start_and_keep_running(tcp_port=None):
                                  "stop` first".format(tcp_port))
             logging.info("The database is already running")
         else:
-            start(tcp_port)
+            start(tcp_port, level=logging.INFO)
         keep_running_path().touch()
 
 
@@ -282,7 +283,7 @@ def stop_when_unused():
             if not try_exclusive(users):
                 logging.info("The database is in use, so it will stop when that finishes")
                 return
-        stop()
+        stop(level=logging.INFO)
 
 
 def status():

@@ -29,8 +29,9 @@ def dump(path, database_name=database.DATABASE, pg_dump=None):
     partial.rename(path)
 
 
-def take(directory=None, database_name=database.DATABASE, now=None):
-    """Backs the database up, then deletes the backups that are no longer needed."""
+def take(directory=None, database_name=database.DATABASE, now=None, level=logging.DEBUG):
+    """Backs the database up, then deletes the backups that are no longer needed. Says so at `level`: routine before
+    most commands, but the point of `backup`."""
     directory = pathlib.Path(directory or default_directory())
     directory.mkdir(parents=True, exist_ok=True)
     now = now or datetime.datetime.now()
@@ -38,7 +39,7 @@ def take(directory=None, database_name=database.DATABASE, now=None):
     logging.debug("Backing up the database...")
     elapsed = timing.Stopwatch()
     dump(path, database_name)
-    logging.debug("Backed up to %s (%s) in %s", path, size(path), elapsed)
+    logging.log(level, "Backed up to %s (%s) in %s", path, size(path), elapsed)
     prune(directory, now)
     return path
 
