@@ -43,7 +43,7 @@ LIBRARY_COLUMNS = [
 
 def import_library(database_name):
     """Imports the Music library, returning how many new plays were recorded, and how many of them were estimated."""
-    logging.info("Reading the Music library, which can take a while...")
+    logging.debug("Reading the Music library, which can take a while...")
     elapsed = timing.Stopwatch()
     tracks = read_library()
     if not tracks:
@@ -51,7 +51,7 @@ def import_library(database_name):
         raise SystemExit("No songs found in the Music library")
     logging.info("Found %d songs in %s", len(tracks), elapsed)
 
-    logging.info("Updating the database...")
+    logging.debug("Updating the database...")
     with database.connect(database_name) as db:
         database.require_set_up(db)
         load_library(db, tracks)
